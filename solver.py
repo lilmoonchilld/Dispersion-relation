@@ -231,12 +231,12 @@ for m in m_vals:
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
 for i, m in enumerate(m_vals):
     ax1.plot([m]*len(all_omegas[i]), np.real(all_omegas[i]), 'k.', markersize=2, alpha=0.3)
-ax1.set_ylabel('Re($\omega$)')
+ax1.set_ylabel('Re($\\\omega$)')
 ax1.set_xlabel('Azimuthal wavenumber $m$')
 ax1.set_title('Global Dispersion Relation (Real part)')
 
 ax2.plot(m_vals, max_imag_omega, 'r-o')
-ax2.set_ylabel('Max Im($\omega$) [Growth Rate]')
+ax2.set_ylabel('Max Im($\\\omega$) [Growth Rate]')
 ax2.set_xlabel('Azimuthal wavenumber $m$')
 ax2.set_title('Global Dispersion Relation (Imaginary part)')
 ax2.grid(True)
@@ -259,7 +259,7 @@ if most_unstable_vec is not None:
         axes[i].grid(True)
 
     axes[-1].set_xlabel('Radius $r$ [m]')
-    axes[0].set_title(f'Eigenmode Structure (Most Unstable Mode: m={most_unstable_m}, $\omega$={most_unstable_omega:.4e})')
+    axes[0].set_title(f'Eigenmode Structure (Most Unstable Mode: m={most_unstable_m}, $\\omega$={most_unstable_omega:.4e})')
     plt.tight_layout()
     plt.savefig('eigenmode_structure.png', dpi=300)
     plt.close()
