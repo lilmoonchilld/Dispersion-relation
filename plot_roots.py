@@ -2,107 +2,108 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def main():
-    # Parameters
-    G = 6.67430e-11
-    M = 5.683e26
-    R_saturn = 60268000.0
-    r = 100000000.0
-    Omega = 1.637e-4
-    H = 10.0
-    rho = 100.0
-    mu0 = 4 * np.pi * 1e-7
-    B0 = 2e-5 * (R_saturn / r)**3
-    m = 0
+    # Given parameters
+    Omega = 2.0         # rad/s
+    r0 = 0.5            # m
+    H0 = 0.05           # m
+    rho0 = 1000.0       # kg/m^3
+    B0 = 0.003          # T
+    C = 0.05            # m^3/s^2
+    m = 2.0             # azimuthal wavenumber
+    mu0 = 4 * np.pi * 1e-7  # T m / A
 
-    # We want K values.
-    # Instability usually occurs for a range of k around a few times 10^-3 to 10^-1.
-    K_vals = np.linspace(0.001, 0.15, 1000)
+    # Derived parameters
+    f = 2 * Omega
+    c0_sq = (Omega**2 * r0 - C / r0**2) * H0
+    Omega_A_sq = B0**2 / (mu0 * rho0 * H0**2)
+    B_param = (Omega**2 + 2 * C / r0**3) * H0
+    k_theta = m / r0
 
-    # Let's extract the components for each root
+    # Wavenumber range for k_r
+    kr_vals = np.linspace(0.1, 50, 1000)
+
     roots_1 = []
     roots_2 = []
     roots_3 = []
     roots_4 = []
+    k_vals = []
 
-    for K in K_vals:
-        kr = K
-        k_sq = K**2
-        k_abs = K
+    for kr in kr_vals:
+        k_sq = kr**2 + k_theta**2
+        k = np.sqrt(k_sq)
+        k_vals.append(k)
 
-        A = B0**2 / (mu0 * rho * H**2)
-        B_term = H * (G * M * H / r**3 - 2 * np.pi * G * rho / k_abs)
-        C_term = k_sq - 1j * 5 * kr / (2 * r)
+        # Coefficients of the quartic equation:
+        # C4 * w^4 + C3 * w^3 + C2 * w^2 + C1 * w + C0 = 0
 
-        C4 = 1
-        C3 = 0
-        C2 = -(2*A + 4*Omega**2 + B_term * C_term)
-        C1 = 0
-        C0 = A * (A + B_term * C_term)
+        C4 = 1.0
+        C3 = 0.0
+        C2 = -(k_sq * c0_sq - 2 * Omega_A_sq + f**2 - 1j * B_param * kr)
+        C1 = f * B_param * k_theta
+        C0 = -(Omega_A_sq * (k_sq * c0_sq - Omega_A_sq)) + 1j * B_param * kr * Omega_A_sq
 
         coeffs = [C4, C3, C2, C1, C0]
+
+        # Calculate roots using standard numpy
         rts = np.roots(coeffs)
 
-        # We need a stable way to assign roots 1-4.
-        # Since it's a biquadratic equation (roughly), we expect roots to be around +/- omega_a and +/- omega_b.
-        # Let's just sort them by real part, then imaginary part.
+        # Sort roots to maintain consistency across iterations
+        # We can sort by real part first
         rts = sorted(rts, key=lambda x: (x.real, x.imag))
 
-        roots_1.append(rts[0] / (2 * Omega))
-        roots_2.append(rts[1] / (2 * Omega))
-        roots_3.append(rts[2] / (2 * Omega))
-        roots_4.append(rts[3] / (2 * Omega))
+        # Normalize roots by 2*Omega
+        rts_norm = [r / (2 * Omega) for r in rts]
+
+        roots_1.append(rts_norm[0])
+        roots_2.append(rts_norm[1])
+        roots_3.append(rts_norm[2])
+        roots_4.append(rts_norm[3])
 
     roots_1 = np.array(roots_1)
     roots_2 = np.array(roots_2)
     roots_3 = np.array(roots_3)
     roots_4 = np.array(roots_4)
+    k_vals = np.array(k_vals)
 
-    # Plotting Root 1
-    plt.figure(figsize=(8, 6))
-    plt.plot(K_vals, roots_1.real, label='Real')
-    plt.plot(K_vals, roots_1.imag, label='Imaginary', linestyle='dashed')
-    plt.xlabel('K (|k|)')
-    plt.ylabel('Normalized Frequency ($\\omega / 2\\Omega$)')
-    plt.title('Root 1 vs K')
-    plt.legend()
-    plt.grid(True)
-    plt.savefig('root_1.png')
-    plt.close()
+    # Function to create individual plots
+    def plot_root(k, root_array, title, filename):
+        plt.figure(figsize=(8, 6))
+        plt.plot(k, root_array.real, label='Real')
+        plt.plot(k, root_array.imag, label='Imaginary', linestyle='dashed')
+        plt.xlabel(r'Total Wavenumber $k = \sqrt{k_r^2 + (m/r_0)^2}$')
+        plt.ylabel(r'Normalized Frequency ($\omega / 2\Omega$)')
+        plt.title(title)
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(filename)
+        plt.close()
 
-    # Plotting Root 2
-    plt.figure(figsize=(8, 6))
-    plt.plot(K_vals, roots_2.real, label='Real')
-    plt.plot(K_vals, roots_2.imag, label='Imaginary', linestyle='dashed')
-    plt.xlabel('K (|k|)')
-    plt.ylabel('Normalized Frequency ($\\omega / 2\\Omega$)')
-    plt.title('Root 2 vs K')
-    plt.legend()
-    plt.grid(True)
-    plt.savefig('root_2.png')
-    plt.close()
+    # Create individual plots
+    plot_root(k_vals, roots_1, 'Root 1 vs k', 'root_1.png')
+    plot_root(k_vals, roots_2, 'Root 2 vs k', 'root_2.png')
+    plot_root(k_vals, roots_3, 'Root 3 vs k', 'root_3.png')
+    plot_root(k_vals, roots_4, 'Root 4 vs k', 'root_4.png')
 
-    # Plotting Root 3
-    plt.figure(figsize=(8, 6))
-    plt.plot(K_vals, roots_3.real, label='Real')
-    plt.plot(K_vals, roots_3.imag, label='Imaginary', linestyle='dashed')
-    plt.xlabel('K (|k|)')
-    plt.ylabel('Normalized Frequency ($\\omega / 2\\Omega$)')
-    plt.title('Root 3 vs K')
-    plt.legend()
-    plt.grid(True)
-    plt.savefig('root_3.png')
-    plt.close()
+    # Create combined plot
+    plt.figure(figsize=(10, 8))
+    plt.plot(k_vals, roots_1.real, label='Root 1 (Real)', color='blue')
+    plt.plot(k_vals, roots_2.real, label='Root 2 (Real)', color='red')
+    plt.plot(k_vals, roots_3.real, label='Root 3 (Real)', color='green')
+    plt.plot(k_vals, roots_4.real, label='Root 4 (Real)', color='purple')
 
-    # Plotting Root 4
-    plt.figure(figsize=(8, 6))
-    plt.plot(K_vals, roots_4.real, label='Real')
-    plt.plot(K_vals, roots_4.imag, label='Imaginary', linestyle='dashed')
-    plt.xlabel('K (|k|)')
-    plt.ylabel('Normalized Frequency ($\\omega / 2\\Omega$)')
-    plt.title('Root 4 vs K')
-    plt.legend()
+    # Also plot imaginary parts if you want them on the combined plot
+    plt.plot(k_vals, roots_1.imag, label='Root 1 (Imag)', color='blue', linestyle='dashed')
+    plt.plot(k_vals, roots_2.imag, label='Root 2 (Imag)', color='red', linestyle='dashed')
+    plt.plot(k_vals, roots_3.imag, label='Root 3 (Imag)', color='green', linestyle='dashed')
+    plt.plot(k_vals, roots_4.imag, label='Root 4 (Imag)', color='purple', linestyle='dashed')
+
+    plt.xlabel(r'Total Wavenumber $k = \sqrt{k_r^2 + (m/r_0)^2}$')
+    plt.ylabel(r'Normalized Frequency ($\omega / 2\Omega$)')
+    plt.title(r'All Dispersion Branches (Normalized $\omega$) vs Total Wavenumber $k$')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.grid(True)
-    plt.savefig('root_4.png')
+    plt.tight_layout()
+    plt.savefig('combined_roots.png')
     plt.close()
 
 if __name__ == "__main__":
