@@ -136,39 +136,40 @@ def wkb_branches(m_val, hat_omA2, hat_c0sq, gamma, n_radial=1):
 
 
 # ── 3. Sweeping Logic ───────────────────────────────────────────────────────
-M_max = 20
+import itertools
+
+M_max = 15
 m_arr = np.arange(1, M_max + 1)
 m_fine = np.linspace(1, M_max, 200)
 
 COLORS = {'MP': '#1f77b4', 'MK': '#2ca02c', 'R': '#d62728', 'MS': '#ff7f0e', 'col': 'k'}
 
-# Condition: delta_hat_r * |1 - gamma/2| / hat_c0sq <= 0.05
-# delta_hat_r = 0.910
-# So: |1 - gamma/2| / hat_c0sq <= 0.0549
+# Parameter grid designed so that delta_hat_r * |1 - gamma/2| / hat_c0sq <= 0.05 is mathematically satisfied for all 27 combinations.
+# delta_hat_r = 0.910. Worst case gamma=4.0 -> |1 - 2| = 1.0. So 0.910 * 1.0 / hat_c0sq <= 0.05 -> hat_c0sq >= 18.2
+levels = {
+    'hat_omA':  {'Low': 0.1, 'Medium': 1.0, 'High': 5.0},
+    'hat_c0sq': {'Low': 20.0, 'Medium': 35.0, 'High': 50.0},
+    'gamma':    {'Low': 0.5, 'Medium': 2.0, 'High': 4.0}
+}
 
-cases = [
-    # Low: weak field, low gravity, high burger (to satisfy constraint easily)
-    {'name': 'Low',    'hat_omA': 0.1,  'hat_c0sq': 20.0,  'gamma': 0.5},
-    # Medium: medium field, balanced gravity/rotation (gamma=2 -> 1-gamma/2=0 constraint is exactly 0)
-    {'name': 'Medium', 'hat_omA': 1.0,  'hat_c0sq': 5.0,   'gamma': 2.0},
-    # High: strong field, strong gravity, high burger to offset gravity term
-    {'name': 'High',   'hat_omA': 5.0,  'hat_c0sq': 30.0,  'gamma': 4.0}
-]
+states = ['Low', 'Medium', 'High']
+combinations = list(itertools.product(states, repeat=3))
 
-for case in cases:
-    name = case['name']
-    hat_omA = case['hat_omA']
-    hat_c0sq = case['hat_c0sq']
-    gamma = case['gamma']
+print(f"Starting full-factorial sweep ({len(combinations)} combinations)...")
+
+for idx, (s_omA, s_c0sq, s_gamma) in enumerate(combinations, start=1):
+    hat_omA = levels['hat_omA'][s_omA]
+    hat_c0sq = levels['hat_c0sq'][s_c0sq]
+    gamma = levels['gamma'][s_gamma]
 
     hat_omA2 = hat_omA**2
     constraint_val = delta_hat_r * abs(1.0 - gamma/2.0) / hat_c0sq
 
-    print(f"==========================================================")
-    print(f"  Configuration: {name}")
+    name = f"omA-{s_omA}_c0sq-{s_c0sq}_gamma-{s_gamma}"
+
+    print(f"\n[{idx}/{len(combinations)}] {name}")
     print(f"  hat_omega_A = {hat_omA}, hat_c0^2 = {hat_c0sq}, gamma = {gamma}")
-    print(f"  Constraint Value: {constraint_val:.4f} (Must be <= 0.05)")
-    print(f"==========================================================")
+    print(f"  Constraint Value: {constraint_val:.4f} (<= 0.05)")
 
     if constraint_val > 0.05:
         print("  WARNING: Constraint violated!")
@@ -187,10 +188,10 @@ for case in cases:
         wkb['R'].append(oR)
         wkb['MS'].append(oMS)
 
-    print(f"  Running collocation (scan range {scan_range[0]:.1f} to {scan_range[1]:.1f})...")
     col_eigs = {}
     for m_val in m_arr:
-        eigs = find_eigenvalues(m_val, hat_omA2, hat_c0sq, gamma, omega_range=scan_range, n_scan=800)
+        # Reduced n_scan to 400 for 27-combination tractability
+        eigs = find_eigenvalues(m_val, hat_omA2, hat_c0sq, gamma, omega_range=scan_range, n_scan=400)
         col_eigs[m_val] = eigs
 
     # Plotting
