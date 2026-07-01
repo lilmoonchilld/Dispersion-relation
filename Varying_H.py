@@ -1,5 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.linalg import det
+import warnings
+warnings.filterwarnings("ignore")
 
 # ── 0.  Physical parameters ─────────────────────────────────────────────────
 MU0   = 4 * np.pi * 1e-7
@@ -15,137 +18,128 @@ r2    = 1e8        # outer radius [m]
 r0    = 0.5 * (r1 + r2)
 
 VA2      = B0**2 / (MU0 * rho0)
+omA2     = VA2 / H0**2
+omA      = np.sqrt(omA2)
+beta_g   = 2.0 * C / r0**3
+beta_eff = Omega**2 + beta_g
+c0sq     = g * H0
+c0       = np.sqrt(c0sq)
+f        = 2.0 * Omega          # Coriolis parameter
 
 # ── Dimensionless Parameters ────────────────────────────────────────────────
+f_scale = 2.0 * Omega
 hat_r1 = r1 / r0
 hat_r2 = r2 / r0
-hat_c0sq = g * H0 / (Omega**2 * r0**2)
+hat_c0sq = c0sq / (Omega**2 * r0**2)
 hat_VA2 = VA2 / (Omega**2 * r0**2)
-gamma = C / (g * H0 * r0)
-beta = (r0 / H0)**2
+gamma = 2.0 * C / (Omega**2 * r0**3)
+hat_omA = np.sqrt(VA2) / (f_scale * H0)
+hat_omA2 = hat_omA**2
 
 print("=" * 62)
 print("  System Parameters (Dimensionless)")
 print("=" * 62)
-print(f"  hat_c0^2 : {hat_c0sq:.4f}")
-print(f"  hat_VA^2 : {hat_VA2:.4e}")
-print(f"  gamma    : {gamma:.4f}")
-print(f"  beta     : {beta:.4e}")
+print(f"  Three Governing Numbers:")
+print(f"    1. Magnetic-Coriolis ratio (hat_omega_A) : {hat_omA:.4f}")
+print(f"    2. Burger number           (hat_c0^2)    : {hat_c0sq:.4f}")
+print(f"    3. Radial-gravity ratio    (gamma)       : {gamma:.4f}")
 print("-" * 62)
 print(f"  Domain: hat_r in [{hat_r1:.3f}, {hat_r2:.3f}]")
 print()
 
+# ── 1.  Collocation machinery ───────────────────────────────────────────────
+N_col = 32
+
 def chebyshev_lobatto(N, r_min, r_max):
-    j = np.arange(N)
-    xi = np.cos(j * np.pi / (N - 1))
-    c = np.ones(N)
-    c[0] = 2; c[-1] = 2
-    X = np.tile(xi, (N, 1))
-    dX = X - X.T
+    j = np.arange(N); xi = np.cos(j * np.pi / (N - 1))
+    c = np.ones(N); c[0] = 2; c[-1] = 2
+    X = np.tile(xi, (N, 1)); dX = X - X.T
     D = np.zeros((N, N))
     for i in range(N):
         for k in range(N):
             if i != k:
                 D[i, k] = (c[i] / c[k]) / dX[i, k]
     D -= np.diag(D.sum(axis=1))
-    sc = 2.0 / (r_max - r_min)
-    D1 = sc * D
-    rp = 0.5 * (r_min + r_max) + 0.5 * (r_max - r_min) * xi
-    # flip so that r is increasing
-    rp = rp[::-1]
-    D1 = D1[::-1, ::-1]
-    return rp, D1
+    sc = 2.0 / (r_max - r_min); D1 = sc * D; D2 = D1 @ D1
+    rp = 0.5*(r_min+r_max) + 0.5*(r_max-r_min)*xi
+    rp = rp[::-1]; D1 = D1[::-1,::-1]; D2 = D2[::-1,::-1]
+    return rp, D1, D2
 
-def solve_gevp(N, m_val):
-    rp, D1 = chebyshev_lobatto(N, hat_r1, hat_r2)
+hat_r_grid, D1_mat, D2_mat = chebyshev_lobatto(N_col, hat_r1, hat_r2)
 
-    H = 1.0 + (1.0/hat_c0sq - gamma) * (rp - 1.0)
-    dHdr = (1.0/hat_c0sq - gamma) * np.ones_like(rp)
+def omega_star_hat(hat_omega):
+    """Dimensionless modified frequency hat_omega_* = hat_omega + hat_omega_A^2 / hat_omega."""
+    return hat_omega + hat_omA2 / hat_omega
 
-    A = np.zeros((5*N, 5*N), dtype=complex)
+def build_matrix(hat_omega, m_val):
+    ws_hat = omega_star_hat(hat_omega)
 
-    I = np.eye(N)
-    Z = np.zeros((N, N))
+    # P_coeff: 1/r - (1+gamma)(r-1)/c0^2
+    Pv = 1.0 / hat_r_grid - (1.0 + gamma) * (hat_r_grid - 1.0) / hat_c0sq
 
-    idx_eta = slice(0, N)
-    idx_vr  = slice(N, 2*N)
-    idx_vt  = slice(2*N, 3*N)
-    idx_Br  = slice(3*N, 4*N)
-    idx_Bt  = slice(4*N, 5*N)
+    # Q_coeff
+    term1 = 4.0 * hat_omega * (ws_hat**2 - 1.0) / (ws_hat * hat_c0sq)
+    term2 = -m_val**2 / hat_r_grid**2
+    term3 = -(1.0 + gamma) * (2.0 * hat_r_grid - 1.0) / (hat_c0sq * hat_r_grid)
+    term4 = -m_val * (1.0 + gamma) * (hat_r_grid - 1.0) / (ws_hat * hat_c0sq * hat_r_grid)
+    Qv = term1 + term2 + term3 + term4
 
-    # 1. Continuity:
-    A[idx_eta, idx_eta] = Z
-    A[idx_eta, idx_vr]  = -1j * np.diag(H) @ D1 - 1j * np.diag(H / rp + dHdr)
-    A[idx_eta, idx_vt]  = np.diag(m_val * H / rp)
-    A[idx_eta, idx_Br]  = Z
-    A[idx_eta, idx_Bt]  = Z
+    L = D2_mat + np.diag(Pv) @ D1_mat + np.diag(Qv)
+    for idx in [0, N_col - 1]:
+        rb = hat_r_grid[idx]
+        bc_eta_coeff = -(ws_hat * (1.0 + gamma) * (rb - 1.0) + m_val * hat_c0sq / rb)
+        L[idx,:] = ws_hat * hat_c0sq * D1_mat[idx,:] + bc_eta_coeff * np.eye(N_col)[idx]
+    return L
 
-    # 2. Radial Momentum:
-    A[idx_vr, idx_eta] = -1j * hat_c0sq * D1
-    A[idx_vr, idx_vr]  = Z
-    A[idx_vr, idx_vt]  = 2j * I
-    A[idx_vr, idx_Br]  = 1j * np.diag(hat_VA2 * beta / H)
-    A[idx_vr, idx_Bt]  = Z
+def find_eigenvalues(m_val, omega_range=(-10, 10), n_scan=2000):
+    """Return sorted real eigenfrequencies (dimensionless) for azimuthal mode m_val."""
+    scan = np.linspace(*omega_range, n_scan)
+    # Avoid zero singularity
+    scan = scan[np.abs(scan) > 0.01]
+    ld = []
+    for w in scan:
+        try:
+            d = np.log(np.abs(det(build_matrix(w, m_val))) + 1e-300)
+        except Exception:
+            d = np.nan
+        ld.append(d)
 
-    # 3. Azimuthal Momentum:
-    A[idx_vt, idx_eta] = np.diag(m_val * hat_c0sq / rp)
-    A[idx_vt, idx_vr]  = -2j * I
-    A[idx_vt, idx_vt]  = Z
-    A[idx_vt, idx_Br]  = Z
-    A[idx_vt, idx_Bt]  = 1j * np.diag(hat_VA2 * beta / H)
+    roots = []
+    for k in range(1, len(ld) - 1):
+        if ld[k] < ld[k-1] and ld[k] < ld[k+1]:
+            w = complex(scan[k])
+            for _ in range(80):
+                dw = 1e-6*abs(w) + 1e-10
+                try:
+                    f0 = det(build_matrix(w, m_val))
+                    fp = ((det(build_matrix(w+dw, m_val))
+                           - det(build_matrix(w-dw, m_val)))
+                          / (2*dw))
+                    if abs(fp) < 1e-300: break
+                    step = -f0 / fp; w += step
+                    if abs(step) < 1e-10 * (abs(w) + 1): break
+                except Exception:
+                    break
+            try:
+                residual = abs(det(build_matrix(w, m_val)))
+                valid_ld = [x for x in ld if np.isfinite(x)]
+                ld_max = max(valid_ld) if len(valid_ld) > 0 else 0
+                if residual < 1e-3 * np.exp(ld_max):
+                    dup = any(abs(w - wr) < 5e-3 for wr in roots)
+                    if not dup:
+                        roots.append(w)
+            except Exception:
+                pass
+    return np.array(sorted([wr.real for wr in roots]))
 
-    # 4. Radial Induction:
-    A[idx_Br, idx_eta] = Z
-    A[idx_Br, idx_vr]  = 1j * np.diag(np.sqrt(beta) / H)
-    A[idx_Br, idx_vt]  = Z
-    A[idx_Br, idx_Br]  = Z
-    A[idx_Br, idx_Bt]  = Z
+# ── 2.  Compute everything ───────────────────────────────────────────────────
+M_max  = 30
+m_arr  = np.arange(1, M_max + 1)
 
-    # 5. Azimuthal Induction:
-    A[idx_Bt, idx_eta] = Z
-    A[idx_Bt, idx_vr]  = Z
-    A[idx_Bt, idx_vt]  = 1j * np.diag(np.sqrt(beta) / H)
-    A[idx_Bt, idx_Br]  = Z
-    A[idx_Bt, idx_Bt]  = Z
-
-    # Boundary Conditions: vr = 0 at r1 and r2
-    A[N, :] = 0
-    A[N, N] = -1000j
-    A[2*N-1, :] = 0
-    A[2*N-1, 2*N-1] = -1000j
-
-    lam = np.linalg.eigvals(A)
-    omega_hat = lam / 2.0
-    return omega_hat
-
-def get_valid_eigenvalues(m_val, N_base=64, tol=1e-5):
-    om_N = solve_gevp(N_base, m_val)
-    om_N2 = solve_gevp(N_base + 2, m_val)
-
-    # Keep only purely real eigenvalues
-    om_N = om_N[np.abs(om_N.imag) < 1e-4]
-    om_N2 = om_N2[np.abs(om_N2.imag) < 1e-4]
-
-    valid_om = []
-    for w1 in om_N:
-        if len(om_N2) == 0:
-            continue
-        diff = np.abs(om_N2 - w1)
-        if np.min(diff) < tol:
-            valid_om.append(w1.real)
-
-    if len(valid_om) > 0:
-        valid_om = np.unique(np.round(valid_om, 5))
-
-    return np.array(valid_om)
-
-M_max = 30
-m_arr = np.arange(1, M_max + 1)
-
-print("Running Block GEVP spectral collocation for m = 1 …", M_max, "…")
+print("Running Chebyshev collocation for m = 1 …", M_max, "…")
 col_eigs = {}
 for m_val in m_arr:
-    eigs = get_valid_eigenvalues(m_val)
+    eigs = find_eigenvalues(m_val)
     col_eigs[m_val] = eigs
 
 print("\nValid Eigenvalues:")
@@ -164,31 +158,50 @@ for m_val in m_arr:
         out_str = "None"
     print(f"{m_val:>3}  {out_str}")
 
-print("\nGenerating plot...")
 
+# ── 3.  Plot ─────────────────────────────────────────────────────────────────
 plt.figure(figsize=(10, 6))
 
 for m_val in m_arr:
     eigs_n = col_eigs[m_val]
-    # filter out very large non-physical eigenvalues outside the [-1.5, 1.5] range for plot clarity
-    eigs_n = eigs_n[np.abs(eigs_n) <= 1.5]
+    # filter out very large non-physical eigenvalues for plot clarity
+    eigs_n = [e for e in eigs_n if abs(e) <= 1.5]
     if len(eigs_n) > 0:
         plt.scatter([m_val] * len(eigs_n), eigs_n,
-                    s=20, color='k', zorder=5, alpha=0.7)
+                    s=36, color='k', zorder=5, alpha=0.85, marker='o')
 
 plt.axhline(0, color='grey', lw=0.7, ls=':')
 plt.axhline(+1, color='grey', lw=0.6, ls='--', alpha=0.5)
 plt.axhline(-1, color='grey', lw=0.6, ls='--', alpha=0.5)
+if hat_omA > 0:
+    plt.axhline(+hat_omA, color='purple', lw=0.8, ls=':', alpha=0.6)
+    plt.axhline(-hat_omA, color='purple', lw=0.8, ls=':', alpha=0.6)
+    plt.text(M_max + 0.05, hat_omA + 0.02, r'$\hat\omega = \hat\omega_A$',
+            va='bottom', ha='left', fontsize=8, color='purple')
+
+plt.text(M_max + 0.05, 1.05,  r'$\hat\omega = 1$',
+        va='bottom', ha='left', fontsize=8, color='grey')
+
 
 plt.xlabel('Azimuthal wavenumber  $m$', fontsize=13)
 plt.ylabel(r'Normalised frequency  $\hat{\omega}$', fontsize=13)
-plt.title(r'SWMHD Global Eigenvalues' '\n'
+plt.title(r'SWMHD Global Dispersion Relation' '\n'
           r'($\hat{\omega}$ vs $m$, varying $H(r)$)', fontsize=12)
-plt.xlim(0.5, M_max + 0.5)
+plt.xlim(0.7, M_max + 0.4)
 plt.ylim(-1.5, 1.5)
-plt.xticks(np.arange(0, M_max + 1, 2))
+plt.xticks(np.arange(1, M_max + 1, 2))
 plt.grid(True, alpha=0.25)
+
+param_text = (
+    f"$\\hat{{\\omega}}_A = {hat_omA:.4f}$\n"
+    f"$\\hat{{c}}_0^2 = {hat_c0sq:.4f}$\n"
+    f"$\\gamma = {gamma:.4f}$\n"
+    f"$\\hat{{r}}_1 = {hat_r1:.3f}$, $\\hat{{r}}_2 = {hat_r2:.3f}$"
+)
+plt.figtext(0.15, 0.15, param_text,
+         fontsize=10, va='bottom', ha='left',
+         bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.8))
 
 plt.tight_layout()
 plt.savefig('Varying_H.png', dpi=180, bbox_inches='tight')
-print("Saved plot to Varying_H.png")
+print("\nSaved plot to Varying_H.png")
