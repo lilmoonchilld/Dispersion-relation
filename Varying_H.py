@@ -18,31 +18,23 @@ r2    = 1e8        # outer radius [m]
 r0    = 0.5 * (r1 + r2)
 
 VA2      = B0**2 / (MU0 * rho0)
-omA2     = VA2 / H0**2
-omA      = np.sqrt(omA2)
-beta_g   = 2.0 * C / r0**3
-beta_eff = Omega**2 + beta_g
-c0sq     = g * H0
-c0       = np.sqrt(c0sq)
-f        = 2.0 * Omega          # Coriolis parameter
 
 # ── Dimensionless Parameters ────────────────────────────────────────────────
 f_scale = 2.0 * Omega
 hat_r1 = r1 / r0
 hat_r2 = r2 / r0
-hat_c0sq = c0sq / (Omega**2 * r0**2)
+hat_c0sq = g * H0 / (Omega**2 * r0**2)
 hat_VA2 = VA2 / (Omega**2 * r0**2)
-gamma = 2.0 * C / (Omega**2 * r0**3)
-hat_omA = np.sqrt(VA2) / (f_scale * H0)
-hat_omA2 = hat_omA**2
+gamma = C / (g * H0 * r0)
+beta = (r0 / H0)**2
 
 print("=" * 62)
 print("  System Parameters (Dimensionless)")
 print("=" * 62)
-print(f"  Three Governing Numbers:")
-print(f"    1. Magnetic-Coriolis ratio (hat_omega_A) : {hat_omA:.4f}")
-print(f"    2. Burger number           (hat_c0^2)    : {hat_c0sq:.4f}")
-print(f"    3. Radial-gravity ratio    (gamma)       : {gamma:.4f}")
+print(f"  Burger number           (hat_c0^2) : {hat_c0sq:.4e}")
+print(f"  Alfven ratio            (hat_VA^2) : {hat_VA2:.4e}")
+print(f"  Radial-gravity ratio    (gamma)    : {gamma:.4e}")
+print(f"  Beta                    (beta)     : {beta:.4e}")
 print("-" * 62)
 print(f"  Domain: hat_r in [{hat_r1:.3f}, {hat_r2:.3f}]")
 print()
@@ -67,28 +59,45 @@ def chebyshev_lobatto(N, r_min, r_max):
 
 hat_r_grid, D1_mat, D2_mat = chebyshev_lobatto(N_col, hat_r1, hat_r2)
 
-def omega_star_hat(hat_omega):
-    """Dimensionless modified frequency hat_omega_* = hat_omega + hat_omega_A^2 / hat_omega."""
-    return hat_omega + hat_omA2 / hat_omega
+hat_H = 1.0 + (1.0 / hat_c0sq - gamma) * (hat_r_grid - 1.0)
 
 def build_matrix(hat_omega, m_val):
-    ws_hat = omega_star_hat(hat_omega)
+    # A(r) = 2*hat_omega*hat_H + (hat_VA^2 * beta) / (2*hat_omega*hat_H)
+    A_r = 2.0 * hat_omega * hat_H + (hat_VA2 * beta) / (2.0 * hat_omega * hat_H)
 
-    # P_coeff: 1/r - (1+gamma)(r-1)/c0^2
-    Pv = 1.0 / hat_r_grid - (1.0 + gamma) * (hat_r_grid - 1.0) / hat_c0sq
+    # Delta(r) = 4*hat_H^2 - A_r^2
+    Delta_r = 4.0 * hat_H**2 - A_r**2
 
-    # Q_coeff
-    term1 = 4.0 * hat_omega * (ws_hat**2 - 1.0) / (ws_hat * hat_c0sq)
-    term2 = -m_val**2 / hat_r_grid**2
-    term3 = -(1.0 + gamma) * (2.0 * hat_r_grid - 1.0) / (hat_c0sq * hat_r_grid)
-    term4 = -m_val * (1.0 + gamma) * (hat_r_grid - 1.0) / (ws_hat * hat_c0sq * hat_r_grid)
-    Qv = term1 + term2 + term3 + term4
+    # P(r) = - (hat_c0^2 * hat_H^2 * A_r) / Delta_r
+    P_r = - (hat_c0sq * hat_H**2 * A_r) / Delta_r
 
-    L = D2_mat + np.diag(Pv) @ D1_mat + np.diag(Qv)
+    # Q(r) = - 1/r * d/dr [ r * hat_c0^2 * hat_H^2 * A_r / Delta_r ]
+    # which is 1/r * d/dr [ r * P_r ]
+    term_Q = hat_r_grid * P_r
+    d_term_Q = D1_mat @ term_Q
+    Q_r = d_term_Q / hat_r_grid
+
+    # R(r) = 2*hat_omega + 1/r * d/dr [ 2m * hat_c0^2 * hat_H^3 / Delta_r ] + m^2 * hat_c0^2 * hat_H^2 * A_r / (r^2 * Delta_r)
+    term_R1 = (2.0 * m_val * hat_c0sq * hat_H**3) / Delta_r
+    d_term_R1 = D1_mat @ term_R1
+
+    # m^2 * hat_c0^2 * hat_H^2 * A_r / (r^2 * Delta_r) = - m^2 * P_r / r^2
+    term_R2 = - (m_val**2 * P_r) / (hat_r_grid**2)
+
+    R_r = 2.0 * hat_omega + d_term_R1 / hat_r_grid + term_R2
+
+    L = np.diag(P_r) @ D2_mat + np.diag(Q_r) @ D1_mat + np.diag(R_r)
+
+    # Boundary Conditions (vr = 0)
+    # vr is proportional to: A(r) * d(eta)/dr - 2m*H(r)/r * eta = 0
     for idx in [0, N_col - 1]:
         rb = hat_r_grid[idx]
-        bc_eta_coeff = -(ws_hat * (1.0 + gamma) * (rb - 1.0) + m_val * hat_c0sq / rb)
-        L[idx,:] = ws_hat * hat_c0sq * D1_mat[idx,:] + bc_eta_coeff * np.eye(N_col)[idx]
+        Hb = hat_H[idx]
+        Ab = A_r[idx]
+        bc_coeff_eta = - (2.0 * m_val * Hb) / rb
+        L[idx, :] = Ab * D1_mat[idx, :]
+        L[idx, idx] += bc_coeff_eta
+
     return L
 
 def find_eigenvalues(m_val, omega_range=(-10, 10), n_scan=2000):
@@ -158,7 +167,6 @@ for m_val in m_arr:
         out_str = "None"
     print(f"{m_val:>3}  {out_str}")
 
-
 # ── 3.  Plot ─────────────────────────────────────────────────────────────────
 plt.figure(figsize=(10, 6))
 
@@ -173,19 +181,10 @@ for m_val in m_arr:
 plt.axhline(0, color='grey', lw=0.7, ls=':')
 plt.axhline(+1, color='grey', lw=0.6, ls='--', alpha=0.5)
 plt.axhline(-1, color='grey', lw=0.6, ls='--', alpha=0.5)
-if hat_omA > 0:
-    plt.axhline(+hat_omA, color='purple', lw=0.8, ls=':', alpha=0.6)
-    plt.axhline(-hat_omA, color='purple', lw=0.8, ls=':', alpha=0.6)
-    plt.text(M_max + 0.05, hat_omA + 0.02, r'$\hat\omega = \hat\omega_A$',
-            va='bottom', ha='left', fontsize=8, color='purple')
-
-plt.text(M_max + 0.05, 1.05,  r'$\hat\omega = 1$',
-        va='bottom', ha='left', fontsize=8, color='grey')
-
 
 plt.xlabel('Azimuthal wavenumber  $m$', fontsize=13)
 plt.ylabel(r'Normalised frequency  $\hat{\omega}$', fontsize=13)
-plt.title(r'SWMHD Global Dispersion Relation' '\n'
+plt.title(r'SWMHD Global Eigenvalues' '\n'
           r'($\hat{\omega}$ vs $m$, varying $H(r)$)', fontsize=12)
 plt.xlim(0.7, M_max + 0.4)
 plt.ylim(-1.5, 1.5)
@@ -193,9 +192,10 @@ plt.xticks(np.arange(1, M_max + 1, 2))
 plt.grid(True, alpha=0.25)
 
 param_text = (
-    f"$\\hat{{\\omega}}_A = {hat_omA:.4f}$\n"
-    f"$\\hat{{c}}_0^2 = {hat_c0sq:.4f}$\n"
-    f"$\\gamma = {gamma:.4f}$\n"
+    f"$\\hat{{c}}_0^2 = {hat_c0sq:.4e}$\n"
+    f"$\\hat{{V}}_A^2 = {hat_VA2:.4e}$\n"
+    f"$\\gamma = {gamma:.4e}$\n"
+    f"$\\beta = {beta:.4e}$\n"
     f"$\\hat{{r}}_1 = {hat_r1:.3f}$, $\\hat{{r}}_2 = {hat_r2:.3f}$"
 )
 plt.figtext(0.15, 0.15, param_text,
