@@ -22,15 +22,15 @@ warnings.filterwarnings("ignore")
 
 # ── 0.  Physical parameters ─────────────────────────────────────────────────
 MU0   = 4 * np.pi * 1e-7
-Omega = 3.0        # rad/s
-H0    = 0.05       # m
+Omega = 1e-4        # rad/s
+H0    = 50       # m
 g     = 9.81       # m/s^2
-B0    = 0.0       # T
+B0    = 1e-5      # T
 rho0  = 1000.0     # kg/m^3
-C     = 1.5       # m^3/s^2
+C     = 3e16       # m^3/s^2
 
-r1    = 0.3        # inner radius [m]
-r2    = 0.8        # outer radius [m]
+r1    = 9e7        # inner radius [m]
+r2    = 1e8        # outer radius [m]
 r0    = 0.5 * (r1 + r2)
 
 VA2      = B0**2 / (MU0 * rho0)
@@ -64,7 +64,9 @@ print(f"  Domain: hat_r in [{hat_r1:.3f}, {hat_r2:.3f}]")
 print()
 
 # ── 1.  Collocation machinery ───────────────────────────────────────────────
-N_col = 64
+N_base = 32
+N_test = 34
+drift_tolerance = 1e-6
 
 def chebyshev_lobatto(N, r_min, r_max):
     j = np.arange(N); xi = np.cos(j * np.pi / (N - 1))
@@ -81,13 +83,12 @@ def chebyshev_lobatto(N, r_min, r_max):
     rp = rp[::-1]; D1 = D1[::-1,::-1]; D2 = D2[::-1,::-1]
     return rp, D1, D2
 
-hat_r_grid, D1_mat, D2_mat = chebyshev_lobatto(N_col, hat_r1, hat_r2)
 
 def omega_star_hat(hat_omega):
     """Dimensionless modified frequency hat_omega_* = hat_omega + hat_omega_A^2 / hat_omega."""
     return hat_omega + hat_omA2 / hat_omega
 
-def build_matrix(hat_omega, m_val):
+def build_matrix(hat_omega, m_val, hat_r_grid, D1_mat, D2_mat, N):
     ws_hat = omega_star_hat(hat_omega)
 
     # P_coeff: 1/r - (1+gamma)(r-1)/c0^2
@@ -101,21 +102,23 @@ def build_matrix(hat_omega, m_val):
     Qv = term1 + term2 + term3 + term4
 
     L = D2_mat + np.diag(Pv) @ D1_mat + np.diag(Qv)
-    for idx in [0, N_col - 1]:
+    for idx in [0, N - 1]:
         rb = hat_r_grid[idx]
         bc_eta_coeff = -(ws_hat * (1.0 + gamma) * (rb - 1.0) + m_val * hat_c0sq / rb)
-        L[idx,:] = ws_hat * hat_c0sq * D1_mat[idx,:] + bc_eta_coeff * np.eye(N_col)[idx]
+        L[idx,:] = ws_hat * hat_c0sq * D1_mat[idx,:] + bc_eta_coeff * np.eye(N)[idx]
     return L
 
-def find_eigenvalues(m_val, omega_range=(-4, 4), n_scan=700):
-    """Return sorted real eigenfrequencies (dimensionless) for azimuthal mode m_val."""
+def find_eigenvalues(m_val, N, omega_range=(-10, 10), n_scan=2000):
+    """Return sorted real eigenfrequencies (dimensionless) for azimuthal mode m_val at resolution N."""
+    hat_r_grid, D1_mat, D2_mat = chebyshev_lobatto(N, hat_r1, hat_r2)
+
     scan = np.linspace(*omega_range, n_scan)
     # Avoid zero singularity
     scan = scan[np.abs(scan) > 0.01]
     ld = []
     for w in scan:
         try:
-            d = np.log(np.abs(det(build_matrix(w, m_val))) + 1e-300)
+            d = np.log(np.abs(det(build_matrix(w, m_val, hat_r_grid, D1_mat, D2_mat, N))) + 1e-300)
         except Exception:
             d = np.nan
         ld.append(d)
@@ -127,9 +130,9 @@ def find_eigenvalues(m_val, omega_range=(-4, 4), n_scan=700):
             for _ in range(80):
                 dw = 1e-6*abs(w) + 1e-10
                 try:
-                    f0 = det(build_matrix(w, m_val))
-                    fp = ((det(build_matrix(w+dw, m_val))
-                           - det(build_matrix(w-dw, m_val)))
+                    f0 = det(build_matrix(w, m_val, hat_r_grid, D1_mat, D2_mat, N))
+                    fp = ((det(build_matrix(w+dw, m_val, hat_r_grid, D1_mat, D2_mat, N))
+                           - det(build_matrix(w-dw, m_val, hat_r_grid, D1_mat, D2_mat, N)))
                           / (2*dw))
                     if abs(fp) < 1e-300: break
                     step = -f0 / fp; w += step
@@ -137,7 +140,7 @@ def find_eigenvalues(m_val, omega_range=(-4, 4), n_scan=700):
                 except Exception:
                     break
             try:
-                residual = abs(det(build_matrix(w, m_val)))
+                residual = abs(det(build_matrix(w, m_val, hat_r_grid, D1_mat, D2_mat, N)))
                 valid_ld = [x for x in ld if np.isfinite(x)]
                 ld_max = max(valid_ld) if len(valid_ld) > 0 else 0
                 if residual < 1e-3 * np.exp(ld_max):
@@ -147,6 +150,24 @@ def find_eigenvalues(m_val, omega_range=(-4, 4), n_scan=700):
             except Exception:
                 pass
     return np.array(sorted([wr.real for wr in roots]))
+
+
+def filter_spurious_roots(roots_N, roots_N2, tolerance):
+    """
+    Compares roots found at resolution N against resolution N+2.
+    Only keeps roots that appear in both sets within the specified tolerance.
+    """
+    if len(roots_N2) == 0:
+        return np.array([])
+
+    valid_roots = []
+    for root in roots_N:
+        # Minimum absolute distance to any root in N2
+        min_dist = np.min(np.abs(roots_N2 - root))
+        if min_dist <= tolerance:
+            valid_roots.append(root)
+
+    return np.array(valid_roots)
 
 # ── 2.  WKB analytic dispersion relations (Dimensionless) ────────────────────
 # Evaluated at hat_r = 1
@@ -226,15 +247,20 @@ for m_val in m_fine:
     wkb['R'].append(oR)
     wkb['MS'].append(oMS)
 
-print("Running Chebyshev collocation for m = 1 …", M_max, "…")
+print("Running Chebyshev collocation (with N vs N+2 filtering) for m = 1 …", M_max, "…")
 col_eigs = {}
 for m_val in m_arr:
-    eigs = find_eigenvalues(m_val)
+    roots_N = find_eigenvalues(m_val, N_base)
+    roots_N2 = find_eigenvalues(m_val, N_test)
+
+    eigs = filter_spurious_roots(roots_N, roots_N2, drift_tolerance)
     col_eigs[m_val] = eigs
+
     pos = sorted([e for e in eigs if e > 0])
     neg = sorted([e for e in eigs if e < 0], reverse=True)
     if m_val <= 3 or m_val % 5 == 0:
-        print(f"  m={m_val:2d}: +{[f'{x:.3f}' for x in pos]}  "
+        print(f"  m={m_val:2d} ({len(roots_N)} -> {len(eigs)} roots): "
+              f"+{[f'{x:.3f}' for x in pos]}  "
               f"-{[f'{abs(x):.3f}' for x in neg]}")
 
 print()
