@@ -9,15 +9,15 @@ from itertools import product as iproduct
 MU0   = 4 * np.pi * 1e-7   # permeability of free space [H/m]
 
 # --- Adjustable parameters ---------------------------------------------------
-Omega  = 1.0        # rotation rate [rad/s]
-H0     = 0.05       # equilibrium depth at r0 [m]
-g      = 9.81       # vertical gravity [m/s^2]
-B0     = 0.01       # external vertical field [T]
+Omega  = 1e-4       # rotation rate [rad/s]
+H0     = 50.0       # equilibrium depth at r0 [m]
+g      = 10.44      # vertical gravity [m/s^2]
+B0     = 1e-5       # external vertical field [T]
 rho0   = 1000.0     # fluid density [kg/m^3]
-C      = 1.5        # radial gravity constant [m^3/s^2]  (g_r = -C/r^2)
+C      = 3e16       # radial gravity constant [m^3/s^2]  (g_r = -C/r^2)
 
-r1     = 0.3        # inner radius [m]
-r2     = 0.8        # outer radius [m]
+r1     = 9e7        # inner radius [m]
+r2     = 1e8        # outer radius [m]
 r0     = 0.5 * (r1 + r2)   # reference radius [m]
 
 m      = 1          # azimuthal wavenumber (integer)
