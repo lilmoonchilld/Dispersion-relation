@@ -93,6 +93,10 @@ The ODE contains non-constant coefficients $P(r)$ and $Q(r; \omega)$ that depend
 ### `chebyshev_lobatto(N, r_min, r_max)`
 *   **Purpose:** Generates grid points clustered near boundaries and the corresponding differentiation matrices.
 *   **Algorithm:** Uses the explicit trigonometric formulation for Chebyshev extrema $x_j = \cos(j\pi/N)$. Computes $D_{ik} = \frac{c_i}{c_k(x_i - x_k)}$ off-diagonal, and negative sum for diagonals. Scales by $2/(r_{max}-r_{min})$.
+    ```python
+    sc = 2.0 / (r_max - r_min); D1 = sc * D; D2 = D1 @ D1
+    rp = 0.5*(r_min+r_max) + 0.5*(r_max-r_min)*xi
+    ```
 *   **Time/Space:** $O(N^2)$ time, $O(N^2)$ space. Extremely fast for $N=32$.
 *   **Why this approach:** Explicit formula avoids the FFT overhead for small $N$.
 
@@ -104,15 +108,38 @@ The ODE contains non-constant coefficients $P(r)$ and $Q(r; \omega)$ that depend
 ### `find_eigenvalues(m_val)`
 *   **Purpose:** Locates $\omega$ where $\det(L(\omega)) = 0$.
 *   **Algorithm:** Scans a 1D grid of $\omega$, looks for local minima in $\log|\det(L)|$. Once a minimum is found, uses an iterative finite-difference Newton method (`f0/fp`) to polish the root.
+    ```python
+    f0 = det(build_matrix(w, m_val))
+    fp = ((det(build_matrix(w+dw, m_val)) - det(build_matrix(w-dw, m_val))) / (2*dw))
+    if abs(fp) < 1e-300: break
+    step = -f0 / fp; w += step
+    ```
 *   **Why not `eig()`?** Because $L$ depends non-linearly on $\omega$. Standard `eig(A)` solves $Ax = \omega x$. We have $L(\omega)x = 0$. This requires either a massive block companion matrix (GEVP) or a determinant scan. Determinant scanning is memory-efficient and easy to implement.
 
 ### `wkb_branches(m_val, n_radial)`
 *   **Purpose:** Provides analytical estimates for roots.
 *   **Algorithm:** Solves the algebraic quartic \eqref{eq:nd_quartic} spatially averaged over the domain, and evaluates boundary-trapped Kelvin roots analytically.
+    ```python
+    A2 = 2.0*hat_omA2 - 1.0 - 0.25*(hat_c0sq*hat_k2 + R)
+    A1 = -0.25 * S
+    A0 = hat_omA2 * (hat_omA2 - 0.25*(hat_c0sq*hat_k2 + R))
+
+    coeffs = [1.0, 0.0, A2, A1, A0]
+    rts = np.roots(coeffs)
+    ```
 
 ### `assign_branches_global(eigs, m_val)`
 *   **Purpose:** Maps numerical roots to physical branches.
 *   **Algorithm:** Computes pairwise distances between all numerical roots and all WKB predictions. Sorts globally. Greedily assigns shortest distances.
+    ```python
+    distances = []
+    for i, eig in enumerate(eigs):
+        for branch_id, wkb_val in wkb_preds.items():
+            dist = abs(eig - wkb_val)
+            distances.append((dist, i, branch_id))
+
+    distances.sort(key=lambda x: x[0])
+    ```
 *   **Why this approach:** Sequential matching causes cascading errors if one root is misidentified. Global distance matching guarantees the mathematically tightest fit across the entire spectrum.
 
 ---
@@ -133,7 +160,10 @@ The ODE contains non-constant coefficients $P(r)$ and $Q(r; \omega)$ that depend
 ### The Operator Matrix $L$
 *   **Mathematical Representation:** The discretized spatial operator $\mathcal{L} = \partial_{rr} + P(r)\partial_r + Q(r)$.
 *   **Dimensions:** $32 \times 32$. $N$ must be large enough to resolve the highest radial harmonic ($n=8$), requiring at least $\sim 4$ points per wave. $N=32$ is ample.
-*   **Assembly:** Built via matrix addition: `D2_mat + diag(P) @ D1_mat + diag(Q)`.
+*   **Assembly:** Built via matrix addition:
+    ```python
+    L = D2_mat + np.diag(Pv) @ D1_mat + np.diag(Qv)
+    ```
 *   **Properties:** It is **dense** (because Chebyshev derivative matrices are globally dense) and **non-symmetric**.
 *   **Conditioning:** Chebyshev matrices scale as $O(N^4)$ for $D^2$. For $N=32$, condition number is moderate. If $N \to 128$, spectral round-off error would destroy the determinant calculation without preconditioning.
 
@@ -164,13 +194,36 @@ Since we must solve $L(\omega)x = 0$ for non-linear $L$, we seek $\omega$ such t
 
 ## 10. Mathematical Interpretation
 
-**Code:** `Pv = 1.0 / hat_r_grid - (1.0 + gamma) * (hat_r_grid - 1.0) / hat_c0sq`
+**Code:**
+```python
+Pv = 1.0 / hat_r_grid - (1.0 + gamma) * (hat_r_grid - 1.0) / hat_c0sq
+```
 **Equation:** $P(\hat{r}) = \frac{1}{\hat{r}} - \frac{\beta_{\text{eff}}(r-r_0)}{g H_0}$
 **Physics:** Represents the geometric cylindrical spreading ($1/r$) minus the restoring force of the background Potential Vorticity (PV) gradient created by rotation and radial gravity.
 
-**Code:** `term4 = -m_val * (1.0 + gamma) * (hat_r_grid - 1.0) / (ws_hat * hat_c0sq * hat_r_grid)`
+**Code:**
+```python
+term4 = -m_val * (1.0 + gamma) * (hat_r_grid - 1.0) / (ws_hat * hat_c0sq * hat_r_grid)
+```
 **Equation:** $\frac{2\Omega m \beta_{\text{eff}}(r-r_0)}{\omega_* g H_0 r}\tilde{\eta}$
 **Physics:** This is the critical $\beta$-effect term. It couples the azimuthal wavenumber $m$ with the PV gradient to generate Rossby waves.
+
+**Code:**
+```python
+hat_k2_avg = hat_kr**2 + (m_val/1.0)**2
+oR_approx = - (1.0 + gamma) * m_val / (2.0 * (hat_k2_avg + 4.0 / hat_c0sq))
+```
+**Equation:** $\hat{\omega}_R \approx -\frac{\hat{\mathcal{S}}(\hat{r})}{4 + \hat{c}_0^2\hat{\kappa}^2 + \hat{\mathcal{R}}(\hat{r})}$
+**Physics:** Evaluates the purely hydrodynamic ($B_0=0$) analytical Rossby wave frequency. This is used in the code as a heuristic "tie-breaker" to distinguish the Rossby branch from the Magnetostrophic branch, which relies on the magnetic field.
+
+**Code:**
+```python
+arg_in = m_val**2 * hat_c0sq / hat_r1**2 - 4.0 * hat_omA2
+if arg_in >= 0 and hat_omA <= m_val * hat_c0 / (2.0 * hat_r1):
+    oMK_in = -0.5 * np.sqrt(arg_in)
+```
+**Equation:** $\hat{\omega}_{\text{inner}} = -\frac{1}{2}\sqrt{ \frac{m^2 \hat{c}_0^2}{\hat{r}_1^2} - 4\hat{\omega}_A^2 }$
+**Physics:** Computes the boundary-trapped Kelvin wave at the inner boundary, strictly checking the magnetic cutoff condition ($\hat{\omega}_A \le m \hat{c}_0 / 2\hat{r}_1$).
 
 ---
 
@@ -181,9 +234,12 @@ Since we must solve $L(\omega)x = 0$ for non-linear $L$, we seek $\omega$ such t
     $\hat{\omega}_*\hat{c}_0^2\frac{d\tilde{\eta}}{d\hat{r}} - \left[ \hat{\omega}_*(1+\gamma)(\hat{r}-1) + \frac{m\hat{c}_0^2}{\hat{r}} \right]\tilde{\eta} = 0$
 *   **Implementation:**
     ```python
-    L[0,:] = ws_hat * hat_c0sq * D1_mat[0,:] + bc_eta_coeff * np.eye(N_col)[0]
+    for idx in [0, N_col - 1]:
+        rb = hat_r_grid[idx]
+        bc_eta_coeff = -(ws_hat * (1.0 + gamma) * (rb - 1.0) + m_val * hat_c0sq / rb)
+        L[idx,:] = ws_hat * hat_c0sq * D1_mat[idx,:] + bc_eta_coeff * np.eye(N_col)[idx]
     ```
-    We literally overwrite the 0th and (N-1)th equations in our matrix operator with this boundary constraint.
+    We literally overwrite the 0th and (N-1)th equations in our matrix operator with this boundary constraint, directly mapping the gradient $D_1$ and the identity coefficient to the boundaries.
 *   **What if removed?** The matrix operator would be singular with infinite null spaces, representing a domain with open boundaries where fluid leaks into the vacuum. The eigenspectrum would be continuous and meaningless.
 
 ---
