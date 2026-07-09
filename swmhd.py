@@ -134,48 +134,95 @@ def find_eigenvalues(m_val, omega_range=(-45, 45), n_scan=3000):
 
 # ── 2.  WKB analytic dispersion relations (Dimensionless) ────────────────────
 def wkb_branches(m_val, n_radial=1):
-    hat_r = 1.0
     hat_kr = n_radial * np.pi / (hat_r2 - hat_r1)
-    hat_kth = m_val / hat_r
-    hat_k2 = hat_kr**2 + hat_kth**2
 
-    hat_R = 1.0 + gamma
-    hat_S = 0.0
+    r_grid = np.linspace(hat_r1, hat_r2, 40)
+    roots_grid = []
 
-    A2 = 2.0 * hat_omA2 - 1.0 - 0.25 * (hat_c0sq * hat_k2 + hat_R)
-    A1 = -0.25 * hat_S  # this is zero at hat_r=1
-    A0 = hat_omA2 * (hat_omA2 - 0.25 * (hat_c0sq * hat_k2 + hat_R))
+    for r in r_grid:
+        hat_kth = m_val / r
+        hat_k2 = hat_kr**2 + hat_kth**2
 
-    disc = A2**2 - 4.0 * A0
-    if disc < 0: disc = 0.0
+        R = (1+gamma)*(2*r - 1)/r
+        S = m_val*(1+gamma)*(r - 1)/r
 
-    X1 = (-A2 + np.sqrt(disc)) / 2.0
-    X2 = (-A2 - np.sqrt(disc)) / 2.0
+        A2 = 2.0*hat_omA2 - 1.0 - 0.25*(hat_c0sq*hat_k2 + R)
+        A1 = -0.25 * S
+        A0 = hat_omA2 * (hat_omA2 - 0.25*(hat_c0sq*hat_k2 + R))
 
-    oMP_p = +np.sqrt(max(X1, 0))
-    oMP_m = -np.sqrt(max(X1, 0))
+        coeffs = [1.0, 0.0, A2, A1, A0]
+        rts = np.roots(coeffs)
+        # Filter for real roots
+        rts = [x.real for x in rts if abs(x.imag) < 1e-6]
 
-    oMK_hat = np.sqrt(hat_c0sq + hat_VA2) * hat_kth / 2.0
+        # If we don't get 4 real roots (e.g. cutoffs), we just pad with NaNs.
+        if len(rts) == 4:
+            rts = sorted(rts)
+        elif len(rts) == 2:
+            # likely MS and R are gone, or MP are gone.
+            rts = [rts[0], np.nan, np.nan, rts[1]]
+        else:
+            rts = [np.nan, np.nan, np.nan, np.nan]
 
-    oR_hat = - (1.0 + gamma) * m_val / (2.0 * (hat_k2 + 4.0 / hat_c0sq))
+        roots_grid.append(rts)
 
-    oMS_hat = - hat_VA2 * hat_k2 / (4.0 + hat_c0sq * hat_k2)
+    roots_grid = np.array(roots_grid)
+    avg_roots = np.nanmean(roots_grid, axis=0)
 
-    return oMP_p, oMP_m, oMK_hat, oR_hat, oMS_hat
+    oMP_m = avg_roots[0]
+    oMP_p = avg_roots[3]
+
+    # Identify R and MS from the middle roots.
+    mid1, mid2 = avg_roots[1], avg_roots[2]
+
+    # To differentiate Rossby and MS, we can use the old analytical approximation
+    # at r=1 to see which one it's closer to.
+    hat_k2_avg = hat_kr**2 + (m_val/1.0)**2
+    oR_approx = - (1.0 + gamma) * m_val / (2.0 * (hat_k2_avg + 4.0 / hat_c0sq))
+
+    if abs(mid1 - oR_approx) < abs(mid2 - oR_approx):
+        oR_hat = mid1
+        oMS_hat = mid2
+    else:
+        oR_hat = mid2
+        oMS_hat = mid1
+
+    # Kelvin waves
+    # inner
+    hat_c0 = np.sqrt(hat_c0sq)
+
+    arg_in = m_val**2 * hat_c0sq / hat_r1**2 - 4.0 * hat_omA2
+    if arg_in >= 0 and hat_omA <= m_val * hat_c0 / (2.0 * hat_r1):
+        oMK_in = -0.5 * np.sqrt(arg_in)
+    else:
+        oMK_in = np.nan
+
+    # outer
+    arg_out = m_val**2 * hat_c0sq / hat_r2**2 - 4.0 * hat_omA2
+    if arg_out >= 0 and hat_omA <= m_val * hat_c0 / (2.0 * hat_r2):
+        oMK_out = 0.5 * np.sqrt(arg_out)
+    else:
+        oMK_out = np.nan
+
+    return oMP_p, oMP_m, oMK_in, oMK_out, oR_hat, oMS_hat
 
 # ── 3. Branch assignment with global minimum distance logic ─────────────────
 def assign_branches_global(eigs, m_val, N_max=20):
     wkb_preds = {}
 
-    _, _, oMK, _, _ = wkb_branches(m_val, 1)
-    wkb_preds[('MK', 0)] = oMK
+    _, _, oMK_in, oMK_out, _, _ = wkb_branches(m_val, 1)
+
+    if not np.isnan(oMK_in):
+        wkb_preds[('MK_in', 0)] = oMK_in
+    if not np.isnan(oMK_out):
+        wkb_preds[('MK_out', 0)] = oMK_out
 
     for n in range(1, N_max + 1):
-        oMP_p, oMP_m, _, oR, oMS = wkb_branches(m_val, n)
-        wkb_preds[('MP_p', n)] = oMP_p
-        wkb_preds[('MP_m', n)] = oMP_m
-        wkb_preds[('R', n)] = oR
-        wkb_preds[('MS', n)] = oMS
+        oMP_p, oMP_m, _, _, oR, oMS = wkb_branches(m_val, n)
+        if not np.isnan(oMP_p): wkb_preds[('MP_p', n)] = oMP_p
+        if not np.isnan(oMP_m): wkb_preds[('MP_m', n)] = oMP_m
+        if not np.isnan(oR): wkb_preds[('R', n)] = oR
+        if not np.isnan(oMS): wkb_preds[('MS', n)] = oMS
 
     distances = []
     for i, eig in enumerate(eigs):
@@ -196,7 +243,8 @@ def assign_branches_global(eigs, m_val, N_max=20):
             matches[branch_id] = eigs[eig_idx]
 
     results = {
-        'MK': None,
+        'MK_in': None,
+        'MK_out': None,
         'MP_p': {},
         'MP_m': {},
         'R': {},
@@ -205,8 +253,10 @@ def assign_branches_global(eigs, m_val, N_max=20):
 
     for branch_id, eig_val in matches.items():
         b_name, n = branch_id
-        if b_name == 'MK':
-            results['MK'] = eig_val
+        if b_name == 'MK_in':
+            results['MK_in'] = eig_val
+        elif b_name == 'MK_out':
+            results['MK_out'] = eig_val
         else:
             results[b_name][n] = eig_val
 
@@ -219,7 +269,8 @@ m_fine = np.linspace(1, M_max, 400)
 
 print(f"Running collocation N={N_col}, m=1..{M_max} ...")
 
-mk_data = []
+mk_in_data = []
+mk_out_data = []
 mp_p_data = {}
 mp_m_data = {}
 r_data = {}
@@ -229,8 +280,10 @@ for m in m_arr:
     eigs = find_eigenvalues(m)
     assigned = assign_branches_global(eigs, m)
 
-    if assigned['MK'] is not None:
-        mk_data.append((m, assigned['MK']))
+    if assigned['MK_in'] is not None:
+        mk_in_data.append((m, assigned['MK_in']))
+    if assigned['MK_out'] is not None:
+        mk_out_data.append((m, assigned['MK_out']))
 
     for n, val in assigned['MP_p'].items():
         mp_p_data.setdefault(n, []).append((m, val))
@@ -248,7 +301,8 @@ for m in m_arr:
               f"-{[f'{abs(x):.3f}' for x in neg[:4]]}...")
 
 # ── 5.  WKB curves for fine array ────────────────────────────────────────────
-WKB_MK = np.array([wkb_branches(m, 1)[2] for m in m_fine])
+WKB_MK_in = np.array([wkb_branches(m, 1)[2] for m in m_fine])
+WKB_MK_out = np.array([wkb_branches(m, 1)[3] for m in m_fine])
 WKB_MP_p = {}
 WKB_MP_m = {}
 WKB_R = {}
@@ -261,7 +315,7 @@ for n in range(1, 10):
     WKB_MS[n] = np.zeros(len(m_fine))
 
     for i, m in enumerate(m_fine):
-        op, om, _, oR, oMS = wkb_branches(m, n)
+        op, om, _, _, oR, oMS = wkb_branches(m, n)
         WKB_MP_p[n][i] = op
         WKB_MP_m[n][i] = om
         WKB_R[n][i] = oR
@@ -285,8 +339,9 @@ COLORS = {
 
 def draw_panel(ax_obj, zoom=False):
     # WKB curves
-    ax_obj.plot(m_fine, WKB_MK, color=COLORS['MK'], lw=2.5,
+    ax_obj.plot(m_fine, WKB_MK_in, color=COLORS['MK'], lw=2.5,
                 label='Magneto-Kelvin (WKB)', zorder=4)
+    ax_obj.plot(m_fine, WKB_MK_out, color=COLORS['MK'], lw=2.5, zorder=4)
 
     for n in range(1, 9):
         lbl_MP = f'Magneto-Poincaré $n={n}$ (WKB)' if n<=2 and not zoom else ('Magneto-Poincaré (WKB)' if n==1 else None)
@@ -301,10 +356,13 @@ def draw_panel(ax_obj, zoom=False):
         ax_obj.plot(m_fine, WKB_MS[n], color=COLORS['MS'], lw=1.5, ls='-', alpha=alpha_val, label=lbl_MS, zorder=3)
 
     # Collocation points
-    if mk_data:
-        mk_m, mk_w = zip(*mk_data)
+    if mk_in_data:
+        mk_m, mk_w = zip(*mk_in_data)
         ax_obj.scatter(mk_m, mk_w, color=COLORS['MK'], marker='s', s=55, zorder=6,
                        label='Magneto-Kelvin (collocation)')
+    if mk_out_data:
+        mk_m, mk_w = zip(*mk_out_data)
+        ax_obj.scatter(mk_m, mk_w, color=COLORS['MK'], marker='s', s=55, zorder=6)
 
     def plot_branch_collocation(data_dict, color, label_prefix):
         for n in sorted(data_dict.keys()):
@@ -354,9 +412,10 @@ ax.set_title('Full spectrum', fontsize=11)
 # Annotate n=1,2 on left panel at m=1 for MP
 for n, dy in [(1, 1.5), (2, 1.5)]:
     Oh_n1 = wkb_branches(1, n)[0] # MP_p
-    ax.annotate(f'$n={n}$', xy=(1, Oh_n1), xytext=(2.5, Oh_n1+dy*n*0.6),
-                fontsize=9, color=COLORS['MP'],
-                arrowprops=dict(arrowstyle='->', color=COLORS['MP'], lw=0.8))
+    if not np.isnan(Oh_n1):
+        ax.annotate(f'$n={n}$', xy=(1, Oh_n1), xytext=(2.5, Oh_n1+dy*n*0.6),
+                    fontsize=9, color=COLORS['MP'],
+                    arrowprops=dict(arrowstyle='->', color=COLORS['MP'], lw=0.8))
 
 draw_panel(ax2, zoom=True)
 ax2.set_title(r'Slow branches zoom (Rossby & MS)', fontsize=11)
