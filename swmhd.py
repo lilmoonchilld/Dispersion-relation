@@ -157,21 +157,44 @@ def find_eigenvalues(m_val, omega_range=(-45, 45), n_scan=3000):
 def wkb_branches(m_val, n_radial=1):
     hat_kr = n_radial * np.pi / (hat_r2 - hat_r1)
 
-    r_grid = np.linspace(hat_r1, hat_r2, 10)
+    # 1. MP+, MP-, and MS evaluated strictly at r=1
+    r_val = 1.0
+    R_1 = gamma * (2*r_val - 1) / r_val
+    S_1 = 0.0  # S(1) = 0 exactly
+    kappa2_1 = hat_kr**2 + m_val**2 / r_val**2
+    K_1 = hat_c0sq * kappa2_1 + R_1
 
-    oMP_p_arr = []
-    oMP_m_arr = []
+    A2 = 2.0 * hat_omA2 - 1.0 - 0.25 * K_1
+    A1 = 0.0
+    A0 = hat_omA2 * (hat_omA2 - 0.25 * K_1)
+
+    disc = A2**2 - 4.0 * A0
+    if disc < 0: disc = 0.0
+
+    X1 = (-A2 + np.sqrt(disc)) / 2.0
+    X2 = (-A2 - np.sqrt(disc)) / 2.0
+
+    oMP_p = +np.sqrt(max(X1, 0)) if X1 >= 0 else np.nan
+    oMP_m = -np.sqrt(max(X1, 0)) if X1 >= 0 else np.nan
+
+    # MS comes from the slow mode root at r=1. Rossby is exactly 0 here.
+    oMS = -np.sqrt(max(X2, 0)) if X2 >= 0 and hat_omA2 > 0 else np.nan
+    if np.isnan(oMS) and hat_omA2 > 0:
+        oMS = np.sqrt(max(X2, 0)) # Might be positive
+
+    # Recalculate accurately for sign handling: MS approx at r=1
+    oMS_val = - hat_VA2 * kappa2_1 / (4.0 + hat_c0sq * kappa2_1) if hat_VA2 > 0 else 0.0
+
+    # 2. Rossby wave evaluated as an array over 10 points spanning r1 to r2
+    r_grid = np.linspace(hat_r1, hat_r2, 10)
     oR_arr = []
-    oMS_arr = []
 
     for r in r_grid:
-        R_r = ( gamma) * (2*r - 1) / r
-        S_r = m_val * (gamma) * (r - 1) / r
-        kappa2_r = hat_kr**2 + (m_val**2) / (r**2)
-
+        R_r = gamma * (2*r - 1) / r
+        S_r = m_val * gamma * (r - 1) / r
+        kappa2_r = hat_kr**2 + m_val**2 / r**2
         K_r = hat_c0sq * kappa2_r + R_r
 
-        # 4*omega^4 + (8*hat_omA2 - 4 - K_r)*omega^2 - S_r * omega + (4*hat_omA2^2 - hat_omA2 * K_r) = 0
         C4 = 4.0
         C3 = 0.0
         C2 = 8.0 * hat_omA2 - 4.0 - K_r
@@ -181,39 +204,21 @@ def wkb_branches(m_val, n_radial=1):
         roots = np.roots([C4, C3, C2, C1, C0])
         roots = [x.real for x in roots if abs(x.imag) < 1e-6]
 
-        if len(roots) == 4:
+        if len(roots) >= 3:
             roots_sorted = np.sort(roots)
-            oMP_m_val = roots_sorted[0]
-            mid1 = roots_sorted[1]
-            mid2 = roots_sorted[2]
-            oMP_p_val = roots_sorted[3]
-
-            # Tie breaker for R vs MS using the approximate hydrodynamic Rossby wave
+            # R is typically one of the middle roots.
+            # We tie break with the hydrodynamic approximation:
             hat_k2_avg = hat_kr**2 + (m_val/r)**2
-            oR_approx = - (gamma) * m_val / (2.0 * (hat_k2_avg + 4.0 / hat_c0sq))
+            oR_approx = - gamma * m_val / (2.0 * (hat_k2_avg + 4.0 / hat_c0sq))
 
+            mid1, mid2 = roots_sorted[1], roots_sorted[2]
             if abs(mid1 - oR_approx) < abs(mid2 - oR_approx):
                 oR_val = mid1
-                oMS_val = mid2
             else:
                 oR_val = mid2
-                oMS_val = mid1
-        elif len(roots) == 2:
-            roots_sorted = np.sort(roots)
-            oMP_m_val = roots_sorted[0]
-            oMP_p_val = roots_sorted[1]
-            oR_val = np.nan
-            oMS_val = np.nan
+            oR_arr.append(oR_val)
         else:
-            oMP_m_val = np.nan
-            oMP_p_val = np.nan
-            oR_val = np.nan
-            oMS_val = np.nan
-
-        oMP_p_arr.append(oMP_p_val)
-        oMP_m_arr.append(oMP_m_val)
-        oR_arr.append(oR_val)
-        oMS_arr.append(oMS_val)
+            oR_arr.append(np.nan)
 
     # Kelvin waves
     # inner
@@ -232,7 +237,7 @@ def wkb_branches(m_val, n_radial=1):
     else:
         oMK_out = np.nan
 
-    return np.array(oMP_p_arr), np.array(oMP_m_arr), oMK_in, oMK_out, np.array(oR_arr), np.array(oMS_arr)
+    return oMP_p, oMP_m, oMK_in, oMK_out, np.array(oR_arr), oMS_val
 
 # ── 3. Branch assignment with global minimum distance logic ─────────────────
 def assign_branches_global(eigs, m_val, N_max=20):
@@ -246,11 +251,11 @@ def assign_branches_global(eigs, m_val, N_max=20):
         wkb_preds[('MK_out', 0)] = oMK_out
 
     for n in range(1, N_max + 1):
-        oMP_p_arr, oMP_m_arr, _, _, oR_arr, oMS_arr = wkb_branches(m_val, n)
-        wkb_preds[('MP_p', n)] = oMP_p_arr
-        wkb_preds[('MP_m', n)] = oMP_m_arr
+        oMP_p, oMP_m, _, _, oR_arr, oMS_val = wkb_branches(m_val, n)
+        if not np.isnan(oMP_p): wkb_preds[('MP_p', n)] = oMP_p
+        if not np.isnan(oMP_m): wkb_preds[('MP_m', n)] = oMP_m
         wkb_preds[('R', n)] = oR_arr
-        wkb_preds[('MS', n)] = oMS_arr
+        if not np.isnan(oMS_val): wkb_preds[('MS', n)] = oMS_val
 
     distances = []
     for i, eig in enumerate(eigs):
@@ -342,6 +347,8 @@ WKB_MP_m = {}
 WKB_R = {}
 WKB_MS = {}
 
+# WKB_R[n] will be a 2D array: shape (10 points, len(m_fine)) for Rossby.
+# The others are evaluated strictly at r=1 returning scalars for each m.
 for n in range(1, 10):
     op_list = []
     om_list = []
@@ -349,16 +356,16 @@ for n in range(1, 10):
     oMS_list = []
 
     for m in m_fine:
-        op_arr, om_arr, _, _, oR_arr, oMS_arr = wkb_branches(m, n)
-        op_list.append(op_arr)
-        om_list.append(om_arr)
+        op, om, _, _, oR_arr, oMS = wkb_branches(m, n)
+        op_list.append(op)
+        om_list.append(om)
         oR_list.append(oR_arr)
-        oMS_list.append(oMS_arr)
+        oMS_list.append(oMS)
 
-    WKB_MP_p[n] = np.array(op_list).T
-    WKB_MP_m[n] = np.array(om_list).T
+    WKB_MP_p[n] = np.array(op_list)
+    WKB_MP_m[n] = np.array(om_list)
     WKB_R[n] = np.array(oR_list).T
-    WKB_MS[n] = np.array(oMS_list).T
+    WKB_MS[n] = np.array(oMS_list)
 
 # ── 6.  Plot ──────────────────────────────────────────────────────────────────
 fig, (ax, ax2) = plt.subplots(1, 2, figsize=(16, 7),
@@ -390,15 +397,15 @@ def draw_panel(ax_obj, zoom=False):
 
         alpha_val = max(0.1, 0.4 - 0.05*(n-1))
 
-        for i in range(10):
-            lMP = lbl_MP if i == 0 else None
-            lR = lbl_R if i == 0 else None
-            lMS = lbl_MS if i == 0 else None
+        # Plot single scalar lines for MP and MS evaluated at r=1
+        ax_obj.plot(m_fine, WKB_MP_p[n], color=COLORS['MP'], lw=1.5, ls='-', alpha=alpha_val, label=lbl_MP, zorder=3)
+        ax_obj.plot(m_fine, WKB_MP_m[n], color=COLORS['MP'], lw=1.5, ls='-', alpha=alpha_val, zorder=3)
+        ax_obj.plot(m_fine, WKB_MS[n], color=COLORS['MS'], lw=1.5, ls='-', alpha=alpha_val, label=lbl_MS, zorder=3)
 
-            ax_obj.plot(m_fine, WKB_MP_p[n][i], color=COLORS['MP'], lw=1.0, ls='-', alpha=alpha_val, label=lMP, zorder=3)
-            ax_obj.plot(m_fine, WKB_MP_m[n][i], color=COLORS['MP'], lw=1.0, ls='-', alpha=alpha_val, zorder=3)
+        # Plot the 10 lines only for the Rossby branch to form a continuum band
+        for i in range(10):
+            lR = lbl_R if i == 0 else None
             ax_obj.plot(m_fine, WKB_R[n][i], color=COLORS['R'], lw=1.0, ls='-', alpha=alpha_val, label=lR, zorder=3)
-            ax_obj.plot(m_fine, WKB_MS[n][i], color=COLORS['MS'], lw=1.0, ls='-', alpha=alpha_val, label=lMS, zorder=3)
 
     # Collocation points
     if mk_in_data:
