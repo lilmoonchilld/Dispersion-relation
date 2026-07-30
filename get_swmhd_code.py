@@ -1,4 +1,4 @@
-import numpy as np
+print('''import numpy as np
 import matplotlib.pyplot as plt
 from scipy.linalg import det
 import warnings
@@ -366,7 +366,6 @@ fig, (ax, ax2) = plt.subplots(1, 2, figsize=(16, 7),
 fig.suptitle(
     r'SWMHD global dispersion relation (Dimensionless)'
     '\n'
-    '\n'
     r'Magneto-Poincaré (blue), Magneto-Kelvin (green), Rossby (red), Magnetostrophic (orange)',
     fontsize=13, fontweight='bold')
 
@@ -490,10 +489,10 @@ fig.legend(
 
 # Parameter box
 pbox = (
-    rf"$\\hat{{\omega}}_A = {hat_omA:.4f}\n"
-    rf"$\\hat c_0^2 = {hat_c0sq:.4f}\n"
-    rf"$\\gamma = {gamma:.4f}\n"
-    rf"$\\Omega = {Omega:.1e}$ rad/s,  $H_0 = {H0}$ m\n"
+    f"$\\hat{{\\omega}}_A = {hat_omA:.4f}$\n"
+    f"$\\hat c_0^2 = {hat_c0sq:.4f}$\n"
+    f"$\\gamma = {gamma:.4f}$\n"
+    f"$\\Omega = {Omega:.1e}$ rad/s,  $H_0 = {H0}$ m\n"
     f"$r_1 = {r1:.1e}$ m,  $r_2 = {r2:.1e}$ m\n"
     f"$N = {N_col}$"
 )
@@ -505,7 +504,6 @@ fig.subplots_adjust(right=0.78)
 plt.tight_layout(rect=[0, 0.12, 0.78, 1])
 plt.savefig(f"swmhd_four_branch_dispersion_g={g}_C={C}_B={B0}.pdf", dpi=180, bbox_inches='tight')
 plt.savefig(f"swmhd_four_branch_dispersion._g={g}_C={C}_B={B0}.png", dpi=180, bbox_inches='tight')
-print("\nSaved: swmhd_four_branch_dispersion.pdf / .png")
 print("\nSaved: swmhd_four_branch_dispersion.pdf / .png")
 
 
@@ -545,4 +543,4 @@ draw_panel(ax_zoom, zoom=True)
 ax_zoom.set_ylim(-0.1,0.1)
 fig_zoom.tight_layout()
 fig_zoom.savefig(f"ZoomSpectrum_g={g}_C={C}_B={B0}.pdf", dpi=300, bbox_inches="tight")
-fig_zoom.savefig(f"ZoomSpectrum_g={g}_C={C}_B={B0}.png", dpi=300, bbox_inches="tight")
+fig_zoom.savefig(f"ZoomSpectrum_g={g}_C={C}_B={B0}.png", dpi=300, bbox_inches="tight")''')
