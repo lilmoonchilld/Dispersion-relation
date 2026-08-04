@@ -151,22 +151,17 @@ def extract_eta(Oh, m):
 # ==========================================================
 def reconstruct_velocity(Oh, m, eta):
     ws = Oh + hat_omA2 / Oh
-    D_star = ws**2 - 4.0   # denominator
+    denom = 2.0 * (1.0 - ws**2)
 
     # Radial derivative on Chebyshev grid
     deta_dx = D1m @ eta
 
-    # RHS components (dimensionless)
-    RHS_r = (hat_c0sq * deta_dx
-             - (1.0 + gamma) * (xg - 1.0) * eta
-             - m * (1.0 + gamma) * (xg - 1.0) * eta / (ws * xg))
-    RHS_th = (m / xg) * hat_c0sq * eta
+    # Term in brackets
+    bracket = hat_c0sq * deta_dx - (1.0 + gamma) * (xg - 1.0) * eta
 
-    # Cramér's rule:
-    # v_r  = (ws * RHS_r  + 2 * RHS_th) / D*
-    # v_th = (ws * RHS_th - 2 * RHS_r ) / D*
-    v_r  = (ws * RHS_r  + 2.0 * RHS_th) / D_star
-    v_th = (ws * RHS_th - 2.0 * RHS_r ) / D_star
+    # Real amplitudes from Section 11.5 of the derivation document
+    v_r = (ws * bracket - (m * hat_c0sq / xg) * eta) / denom
+    v_th = (bracket - (ws * m * hat_c0sq / xg) * eta) / denom
 
     u0 = np.sqrt(v_r**2 + v_th**2)
     u0_max = np.max(u0) if np.max(u0) > 0 else 1.0
