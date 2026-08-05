@@ -248,12 +248,14 @@ def wkb_branches(m_val, n_radial, p):
     return oMP_p, oMP_m, oMK_in, oMK_out
 
 def select_branch_modes(m_val, p, N_grid=32):
-    """
+    r"""
     Finds the eigenvalues of the system and assigns them to the 4 target branches:
     - Kelvin+ (MK_out)
     - Kelvin− (MK_in)
     - Poincaré+ (MP_p, n=1)
     - Poincaré− (MP_m, n=1)
+
+    Enforces the condition that both Kelvin wave branches have |\hat{\omega}| < 1.0.
     """
     x_grid, D1_mat, D2_mat = cheb(N_grid, p["hat_r1"], p["hat_r2"])
 
@@ -308,10 +310,22 @@ def select_branch_modes(m_val, p, N_grid=32):
     assigned_modes = {}
     used_eigs = set()
 
+    # Assign modes for the 4 target branches
     for branch_name, pred_val in wkb_preds.items():
         if len(eigenvalues) == 0:
             continue
-        sorted_eigs = sorted(eigenvalues, key=lambda x: abs(x - pred_val))
+
+        # Enforce |\hat{\omega}| < 1.0 for the Kelvin wave branches
+        if branch_name in ["Kelvin+", "Kelvin−"]:
+            # Filter eigenvalues to only those with absolute frequency < 1.0
+            valid_eigs = [eig for eig in eigenvalues if abs(eig) < 1.0]
+        else:
+            valid_eigs = eigenvalues
+
+        if len(valid_eigs) == 0:
+            continue
+
+        sorted_eigs = sorted(valid_eigs, key=lambda x: abs(x - pred_val))
         for eig in sorted_eigs:
             if eig not in used_eigs:
                 assigned_modes[branch_name] = {
