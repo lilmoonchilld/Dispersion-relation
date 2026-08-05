@@ -96,7 +96,7 @@ def cheb(N_grid, a, b):
 xg, D1m, D2m = cheb(N, hat_r1, hat_r2)
 
 # ==============================================================================
-# 2. Collocation Matrix Assembly
+# 2. Collocation Matrix Assembly (for Poincaré waves and SVD)
 # ==============================================================================
 def build_L(Oh, m_val):
     ws = Oh + hat_omA2 / Oh
@@ -138,7 +138,7 @@ def extract_eta(Oh, m_val):
     return eta
 
 # ==============================================================================
-# 4. Velocity Reconstruction (Cramér's Rule)
+# 4. Velocity Reconstruction for Poincaré waves (Cramér's Rule)
 # ==============================================================================
 def reconstruct_velocity(Oh, m_val, eta, target_max_u0):
     ws = Oh + hat_omA2 / Oh
@@ -162,7 +162,31 @@ def reconstruct_velocity(Oh, m_val, eta, target_max_u0):
     return v_r, v_th, u0
 
 # ==============================================================================
-# 5. Chebyshev Barycentric Interpolation
+# 5. Analytical Fields for Kelvin Waves (from Section 10 of the theory)
+# ==============================================================================
+def get_analytical_kelvin_fields(Oh, m_val, r_g, target_max_u0):
+    ws = Oh + hat_omA2 / Oh
+    exponent = (1.0 + gamma) / hat_c0sq
+
+    # eta(r) = eta_0 * r^(m/ws) * exp( (1+gamma)/c0sq * (r^2/2 - r) )
+    eta = (r_g ** (m_val / ws)) * np.exp(exponent * (0.5 * r_g**2 - r_g))
+    eta /= np.max(np.abs(eta))
+
+    v_r = np.zeros_like(r_g)
+    v_th = (m_val * hat_c0sq) / (2.0 * ws * r_g) * eta
+
+    # Calculate velocity magnitude
+    u0 = np.abs(v_th)
+
+    # Normalize velocity fields so that max(u0) is exactly target_max_u0
+    u0_max = np.max(u0) if np.max(u0) > 0 else 1.0
+    v_th = v_th / u0_max * target_max_u0
+    u0 = u0 / u0_max * target_max_u0
+
+    return eta, v_r, v_th, u0
+
+# ==============================================================================
+# 6. Chebyshev Barycentric Interpolation
 # ==============================================================================
 def bary_interp(x_eval, x_nodes, f_nodes):
     N_n = len(x_nodes)
@@ -182,17 +206,17 @@ def bary_interp(x_eval, x_nodes, f_nodes):
     return (numer / denom).real
 
 # ==============================================================================
-# 6. Locate and Polish the Four Target Modes
+# 7. Locate and Polish the Four Target Modes
 # ==============================================================================
 # 1. Kelvin counter-rotating (approx -0.5)
 Oh_K_neg = find_eigenvalue(-0.5, m)
-eta_K_neg = extract_eta(Oh_K_neg, m)
+eta_K_neg, _, _, _ = get_analytical_kelvin_fields(Oh_K_neg, m, xg, 0.35)
 if eta_K_neg[0] < 0:
     eta_K_neg *= -1
 
 # 2. Kelvin co-rotating (approx 1.596)
 Oh_K_pos = find_eigenvalue(1.596, m)
-eta_K_pos = extract_eta(Oh_K_pos, m)
+eta_K_pos, _, _, _ = get_analytical_kelvin_fields(Oh_K_pos, m, xg, 0.10)
 if eta_K_pos[0] < 0:
     eta_K_pos *= -1
 
@@ -216,12 +240,12 @@ print(f" 4. Poincaré Co-Rotating:      Oh = {Oh_P_pos: .6f}")
 print("-"*60)
 
 # ==============================================================================
-# 7. Setup Directory for Outputs
+# 8. Setup Directory for Outputs
 # ==============================================================================
 os.makedirs("outputs", exist_ok=True)
 
 # ==============================================================================
-# 8. Core Plotting Routine for Standalone Standalone Figures
+# 9. Core Plotting Routine for Standalone Figures
 # ==============================================================================
 def create_standalone_plot(Oh, eta, m_val, label, filename, eta_lim, u0_lim, target_max_u0, show_ticks, inset_loc, cmap='RdBu_r'):
     """
@@ -234,15 +258,17 @@ def create_standalone_plot(Oh, eta, m_val, label, filename, eta_lim, u0_lim, tar
     r_prime_fine = np.linspace(0, 1, 200)
     r_fine_hat = r_prime_fine * (hat_r2 - hat_r1) + hat_r1
 
-    # Interpolate displacement and reconstructed velocity to fine grid
-    eta_fine = bary_interp(r_fine_hat, xg, eta)
-    v_r, v_th, u0 = reconstruct_velocity(Oh, m_val, eta, target_max_u0)
-    vr_fine = bary_interp(r_fine_hat, xg, v_r)
-    vth_fine = bary_interp(r_fine_hat, xg, v_th)
-
-    u0_fine = np.sqrt(vr_fine**2 + vth_fine**2)
-    u0_fine_max = np.max(u0_fine) if np.max(u0_fine) > 0 else 1.0
-    u0_fine = u0_fine / u0_fine_max * target_max_u0
+    # Get fields for plotting (analytical for Kelvin, barycentric for Poincaré)
+    if 'Kelvin' in label:
+        eta_fine, vr_fine, vth_fine, u0_fine = get_analytical_kelvin_fields(Oh, m_val, r_fine_hat, target_max_u0)
+    else:
+        eta_fine = bary_interp(r_fine_hat, xg, eta)
+        v_r, v_th, u0 = reconstruct_velocity(Oh, m_val, eta, target_max_u0)
+        vr_fine = bary_interp(r_fine_hat, xg, v_r)
+        vth_fine = bary_interp(r_fine_hat, xg, v_th)
+        u0_fine = np.sqrt(vr_fine**2 + vth_fine**2)
+        u0_fine_max = np.max(u0_fine) if np.max(u0_fine) > 0 else 1.0
+        u0_fine = u0_fine / u0_fine_max * target_max_u0
 
     # 1D Left axis (blue): surface displacement eta
     ax_main.set_xlim(0, 1)
@@ -300,9 +326,12 @@ def create_standalone_plot(Oh, eta, m_val, label, filename, eta_lim, u0_lim, tar
     r_arr_hat = np.linspace(hat_r1, hat_r2, N_r)
     r_arr_phys = r_arr_hat * r0 / 1e6 # in units of 10^6 m (0.5 to 1.0)
 
-    eta_col_fine = np.array([bary_interp(np.array([rh]), xg, eta)[0] for rh in r_arr_hat])
-    vr_col_fine = np.array([bary_interp(np.array([rh]), xg, v_r)[0] for rh in r_arr_hat])
-    vth_col_fine = np.array([bary_interp(np.array([rh]), xg, v_th)[0] for rh in r_arr_hat])
+    if 'Kelvin' in label:
+        eta_col_fine, vr_col_fine, vth_col_fine, _ = get_analytical_kelvin_fields(Oh, m_val, r_arr_hat, target_max_u0)
+    else:
+        eta_col_fine = np.array([bary_interp(np.array([rh]), xg, eta)[0] for rh in r_arr_hat])
+        vr_col_fine = np.array([bary_interp(np.array([rh]), xg, v_r)[0] for rh in r_arr_hat])
+        vth_col_fine = np.array([bary_interp(np.array([rh]), xg, v_th)[0] for rh in r_arr_hat])
 
     R2D, T2D = np.meshgrid(r_arr_phys, theta_arr, indexing='ij')
     ETA2D = np.outer(eta_col_fine, np.cos(m_val * theta_arr))
@@ -356,7 +385,7 @@ def create_standalone_plot(Oh, eta, m_val, label, filename, eta_lim, u0_lim, tar
     print(f"Saved: {filename}")
 
 # ==============================================================================
-# 9. Generate the Four Standalone Figure Plots
+# 10. Generate the Four Standalone Figure Plots
 # ==============================================================================
 create_standalone_plot(
     Oh=Oh_K_neg,
