@@ -43,7 +43,12 @@ PRESETS = {
     }
 }
 
-# Defaults
+# =========================================================================
+# Customizable Inputs & Physical Parameters (Global Defaults)
+# =========================================================================
+C = 1e10             # Custom central gravitational force parameter
+B0 = 5e-5            # Custom vertical magnetic field strength [T]
+
 MU0 = 4.0 * np.pi * 1e-7
 Omega = 0.5e-4       # rad/s
 H0 = 500.0           # m
@@ -56,6 +61,7 @@ N_col = 32           # Default grid resolution
 def get_parameters(preset_name=None, C_val=None, B0_val=None):
     """
     Computes derived and dimensionless parameters based on preset or specific values.
+    If no arguments are provided, uses the customizable global default values for C and B0.
     """
     p_C = C_val
     p_B0 = B0_val
@@ -63,9 +69,11 @@ def get_parameters(preset_name=None, C_val=None, B0_val=None):
     if preset_name is not None and preset_name in PRESETS:
         p_C = PRESETS[preset_name]["C"]
         p_B0 = PRESETS[preset_name]["B0"]
-    elif p_C is None or p_B0 is None:
-        p_C = PRESETS["general"]["C"]
-        p_B0 = PRESETS["general"]["B0"]
+    else:
+        if p_C is None:
+            p_C = C
+        if p_B0 is None:
+            p_B0 = B0
 
     r0 = 0.5 * (r1 + r2)
     VA2 = p_B0**2 / (MU0 * rho0)
@@ -246,39 +254,26 @@ def select_branch_modes(m_val, p, N_grid=32):
     - Kelvin− (MK_in)
     - Poincaré+ (MP_p, n=1)
     - Poincaré− (MP_m, n=1)
-
-    Returns a dictionary of structure:
-    {
-      "Kelvin+": {"omega": omega_val, "type": "Kelvin+"},
-      "Kelvin−": {"omega": omega_val, "type": "Kelvin−"},
-      ...
-    }
     """
     x_grid, D1_mat, D2_mat = cheb(N_grid, p["hat_r1"], p["hat_r2"])
 
-    # Perform a dense scanning of frequencies to locate candidate eigenvalues
     scan_range = np.linspace(-45, 45, 2000)
-    # Exclude very small frequencies near 0 to avoid singularities
     scan_range = scan_range[np.abs(scan_range) > 0.05]
 
-    # Compute relative smallest singular values over the scan range
     r_sigmas = []
     for w in scan_range:
         r_sigmas.append(rel_sigma(w, m_val, x_grid, D1_mat, D2_mat, p))
     r_sigmas = np.array(r_sigmas)
 
-    # Detect local minima of the relative smallest singular value
     candidates = []
     for k in range(1, len(r_sigmas) - 1):
         if r_sigmas[k] < r_sigmas[k - 1] and r_sigmas[k] < r_sigmas[k + 1] and r_sigmas[k] < 1e-4:
             candidates.append(scan_range[k])
 
-    # Polish candidates to find exact eigenfrequencies
     eigenvalues = []
     for w_c in candidates:
         lo = w_c - 0.5
         hi = w_c + 0.5
-        # Avoid zero boundary crossing
         if lo * hi < 0:
             lo = 0.05 if w_c > 0 else -hi
             hi = w_c + 0.5
@@ -298,10 +293,8 @@ def select_branch_modes(m_val, p, N_grid=32):
 
     eigenvalues = sorted(eigenvalues)
 
-    # WKB predictions for branch assignment
     oMP_p, oMP_m, oMK_in, oMK_out = wkb_branches(m_val, 1, p)
 
-    # Global minimum distance matching for assignment
     wkb_preds = {}
     if not np.isnan(oMK_out):
         wkb_preds["Kelvin+"] = oMK_out
@@ -315,13 +308,10 @@ def select_branch_modes(m_val, p, N_grid=32):
     assigned_modes = {}
     used_eigs = set()
 
-    # Assign the closest eigenvalue for each predicted branch
     for branch_name, pred_val in wkb_preds.items():
         if len(eigenvalues) == 0:
             continue
-        # Sort eigenvalues by distance to the predicted value
         sorted_eigs = sorted(eigenvalues, key=lambda x: abs(x - pred_val))
-        # Select the closest one that wasn't already used
         for eig in sorted_eigs:
             if eig not in used_eigs:
                 assigned_modes[branch_name] = {
@@ -357,7 +347,6 @@ def interpolate_to_fine_grid(x_eval, x_nodes, f_nodes):
 
     for j in range(N_nodes):
         diff = x_eval - x_nodes[j]
-        # Avoid division by zero at grid nodes
         tiny = np.abs(diff) < 1e-14
         diff[tiny] = 1e-14
         t = w[j] / diff
@@ -369,32 +358,20 @@ def interpolate_to_fine_grid(x_eval, x_nodes, f_nodes):
 def build_annular_field(hat_omega, eta_nodes, m_val, x_nodes, v_r_nodes, v_th_nodes, p, N_theta=200, N_r=100):
     """
     Builds the 2D annular field for the polar inset.
-    Returns:
-    - R2D, T2D: Polar grid
-    - X2D, Y2D: Cartesian grid coordinates
-    - ETA2D: free-surface field eta(r, theta)
-    - VX2D, VY2D: Cartesian velocity vector components
     """
     theta = np.linspace(0, 2.0 * np.pi, N_theta, endpoint=False)
     r_fine = np.linspace(p["hat_r1"], p["hat_r2"], N_r)
 
-    # Interpolate displacement and velocities onto fine radial grid
     eta_fine = interpolate_to_fine_grid(r_fine, x_nodes, eta_nodes)
     vr_fine = interpolate_to_fine_grid(r_fine, x_nodes, v_r_nodes)
     vth_fine = interpolate_to_fine_grid(r_fine, x_nodes, v_th_nodes)
 
-    # Create 2D mesh grids
     R2D, T2D = np.meshgrid(r_fine * p["r0"], theta, indexing='ij')
 
-    # 2D Normal modes:
-    # eta(r, theta) = eta_fine(r) * cos(m*theta)
-    # v_r(r, theta) = v_r_fine(r) * cos(m*theta)
-    # v_th(r, theta) = v_th_fine(r) * sin(m*theta)
     ETA2D = np.outer(eta_fine, np.cos(m_val * theta))
     VR2D = np.outer(vr_fine, np.cos(m_val * theta))
     VTH2D = np.outer(vth_fine, np.sin(m_val * theta))
 
-    # Transform velocities into Cartesian coordinates
     X2D = R2D * np.cos(T2D)
     Y2D = R2D * np.sin(T2D)
 
@@ -407,16 +384,12 @@ def plot_profile(branch_name, hat_omega, x_nodes, eta_nodes, u0_nodes, p, filepa
     """
     Plots the radial eigenfunction profile using dual y-axes.
     """
-    # Create fine grid for smooth plots
     r_prime_fine = np.linspace(0.0, 1.0, 300)
-    # Maps r_prime fine to actual hat_r values
     r_hat_fine = r_prime_fine * (p["hat_r2"] - p["hat_r1"]) + p["hat_r1"]
 
-    # Interpolate values
     eta_fine = interpolate_to_fine_grid(r_hat_fine, x_nodes, eta_nodes)
     u0_fine = interpolate_to_fine_grid(r_hat_fine, x_nodes, u0_nodes)
 
-    # Re-normalize to exact max value of 1.0
     if np.max(np.abs(eta_fine)) > 0:
         eta_fine /= np.max(np.abs(eta_fine))
     if np.max(u0_fine) > 0:
@@ -425,7 +398,6 @@ def plot_profile(branch_name, hat_omega, x_nodes, eta_nodes, u0_nodes, p, filepa
     fig, ax_eta = plt.subplots(figsize=(7, 5))
     ax_u0 = ax_eta.twinx()
 
-    # Displacement plot (left axis, blue)
     ax_eta.plot(r_prime_fine, eta_fine, color='#1f77b4', lw=2.2, label=r'$\eta_0$')
     ax_eta.set_xlabel(r"$r' = (r - r_1) / \Delta r$", fontsize=12)
     ax_eta.set_ylabel(r"$\eta_0$", color='#1f77b4', fontsize=12)
@@ -433,13 +405,11 @@ def plot_profile(branch_name, hat_omega, x_nodes, eta_nodes, u0_nodes, p, filepa
     ax_eta.set_ylim(-1.15, 1.15)
     ax_eta.axhline(0, color='grey', lw=0.7, ls=':')
 
-    # Velocity magnitude plot (right axis, black)
     ax_u0.plot(r_prime_fine, u0_fine, color='black', lw=2.0, ls='-', label=r'$u_0$')
     ax_u0.set_ylabel(r"$u_0$", color='black', fontsize=12)
     ax_u0.tick_params(axis='y', labelcolor='black')
     ax_u0.set_ylim(0, 1.15)
 
-    # Text annotation and title formatting
     formatted_name = branch_name.replace("minus", "(−)").replace("plus", "(+)")
     ax_eta.set_title(f"{formatted_name}\n" + r"$\hat\omega = $" + f"{hat_omega:.4f}", fontsize=13)
 
@@ -456,48 +426,38 @@ def plot_contour(branch_name, hat_omega, m_val, R2D, T2D, X2D, Y2D, ETA2D, VX2D,
     ax.set_aspect('equal')
     ax.axis('off')
 
-    # Displacement contour pcolormesh using symmetric RdBu_r centered at 0
     eta_max = np.max(np.abs(ETA2D)) if np.max(np.abs(ETA2D)) > 0 else 1.0
     norm = TwoSlopeNorm(vmin=-eta_max, vcenter=0.0, vmax=eta_max)
 
     contour = ax.pcolormesh(X2D, Y2D, ETA2D, cmap='RdBu_r', norm=norm, shading='auto', zorder=1)
 
-    # Adaptive subsampling for target of ~300 arrows
-    # Total points = N_r * N_theta
     N_r, N_theta = ETA2D.shape
     total_points = N_r * N_theta
     target_arrows = 300
 
-    # Choose skip intervals
     skip_r = int(np.sqrt(total_points / target_arrows))
     skip_t = skip_r
 
-    # Adjust to ensure it is at least 1
     skip_r = max(1, skip_r)
     skip_t = max(1, skip_t)
 
-    # Subsampled grid
     Xq = X2D[::skip_r, ::skip_t]
     Yq = Y2D[::skip_r, ::skip_t]
     UXq = VX2D[::skip_r, ::skip_t]
     UYq = VY2D[::skip_r, ::skip_t]
 
-    # Normalize quiver arrow lengths for consistent presentation
     speed = np.sqrt(UXq**2 + UYq**2) + 1e-15
     ax.quiver(Xq, Yq, UXq / speed, UYq / speed, scale=35, width=0.0035, color='black', alpha=0.75, zorder=2)
 
-    # Draw inner and outer solid boundaries
     r_phys_1 = p["hat_r1"] * p["r0"]
     r_phys_2 = p["hat_r2"] * p["r0"]
     circle_angles = np.linspace(0.0, 2.0 * np.pi, 400)
     for rcirc in [r_phys_1, r_phys_2]:
         ax.plot(rcirc * np.cos(circle_angles), rcirc * np.sin(circle_angles), 'k-', lw=1.5, zorder=3)
 
-    # Title
     formatted_name = branch_name.replace("minus", "(−)").replace("plus", "(+)")
     ax.set_title(f"{formatted_name}\n" + r"$\hat\omega = $" + f"{hat_omega:.4f}", fontsize=13)
 
-    # Add horizontal colorbar
     cbar = fig.colorbar(contour, ax=ax, orientation='horizontal', pad=0.06, shrink=0.7)
     cbar.set_label(r"$\eta$", fontsize=12)
 
@@ -506,7 +466,7 @@ def plot_contour(branch_name, hat_omega, m_val, R2D, T2D, X2D, Y2D, ETA2D, VX2D,
     plt.savefig(filepath + ".png", dpi=180, bbox_inches='tight')
     plt.close()
 
-def save_branch_figures(preset_name="general", m_val=2, N_grid=32):
+def save_branch_figures(preset_name=None, m_val=2, N_grid=32):
     """
     Main orchestrator for SWMHD eigenfigure generation.
     """
@@ -514,17 +474,15 @@ def save_branch_figures(preset_name="general", m_val=2, N_grid=32):
     p = get_parameters(preset_name=preset_name)
 
     print("=" * 65)
-    print(f" Starting figure generation for Preset: '{preset_name}' (m={m_val})")
+    print(f" Starting figure generation for Custom SWMHD parameters (m={m_val})")
+    print(f" C = {p['C']:.1e}, B0 = {p['B0']:.1e} T")
     print("=" * 65)
 
-    # Find mode eigenvalues
     print("Finding and matching eigenvalues to wave branches...")
     assigned_modes = select_branch_modes(m_val, p, N_grid=N_grid)
 
-    # Set up grid
     x_nodes, D1_mat, D2_mat = cheb(N_grid, p["hat_r1"], p["hat_r2"])
 
-    # Define file suffix and naming patterns
     name_map = {
         "Kelvin+": "Kelvin_plus",
         "Kelvin−": "Kelvin_minus",
@@ -537,7 +495,6 @@ def save_branch_figures(preset_name="general", m_val=2, N_grid=32):
         omega_val = b_info["omega"]
         print(f"Processing branch: {b_key} (omega={omega_val:.4f})")
 
-        # Extract η and reconstruct velocity on collocation nodes
         eta_nodes, _ = extract_eta(omega_val, m_val, x_nodes, D1_mat, D2_mat, p)
         v_r_nodes, v_th_nodes, u0_nodes = reconstruct_velocity(omega_val, m_val, eta_nodes, x_nodes, D1_mat, p)
 
@@ -556,7 +513,7 @@ def save_branch_figures(preset_name="general", m_val=2, N_grid=32):
 
 if __name__ == "__main__":
     import sys
-    preset = "general"
-    if len(sys.argv) > 1:
+    preset = None
+    if len(sys.argv) > 1 and sys.argv[1] in ["general", "reference"]:
         preset = sys.argv[1]
     save_branch_figures(preset_name=preset)
