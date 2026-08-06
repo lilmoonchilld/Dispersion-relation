@@ -573,42 +573,62 @@ report_lines.append("--------------------------------------------------")
 
 print(f"Detected {len(all_eigs)} eigenvalues in scan range [{OMEGA_SCAN_MIN}, {OMEGA_SCAN_MAX}]")
 
-has_rossby = False
-has_magneto_rossby = False
-has_magnetostrophic = False
+# Theoretical insufficiency string as required
+insufficiency_msg = "The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation."
 
-rossby_type_modes = []
+slow_modes_for_plotting = []
 
-# We will classify every eigenvalue using the mathematical decision tree
 for eig in all_eigs:
     res_sig = rel_sigma(eig, m)
     eta = extract_eta(eig, m)
     crossings = np.sum(np.diff(np.sign(eta)) != 0)
 
+    # Reconstruct velocities on collocation grid (without scaling for normalized plotting)
+    # Target max u0 is 1.0 for the raw numerical values
+    v_r, v_th, u0 = reconstruct_velocity(eig, m, eta, 1.0)
+
+    # Rigorous reconstruction of magnetic fields from the derived SWMHD induction relations
+    # b_r = -i * (r0 / (2 * Oh * H0)) * v_r
+    # b_theta = -i * (r0 / (2 * Oh * H0)) * v_theta
+    # To handle potential division by zero if Oh is extremely close to 0:
+    if abs(eig) > 1e-5:
+        # Note: we use complex type to store the exact fields before taking real/magnitude
+        factor = -1j * (r0 / (2.0 * eig * H0))
+        b_r_complex = factor * v_r
+        b_th_complex = factor * v_th
+    else:
+        b_r_complex = np.zeros_like(v_r, dtype=complex)
+        b_th_complex = np.zeros_like(v_th, dtype=complex)
+
+    b_r_mag = np.abs(b_r_complex)
+    b_th_mag = np.abs(b_th_complex)
+
     # 1. Kelvin: matches the analytical/boundary-trapped polished frequencies
+    is_kelvin = False
     if abs(eig - Oh_K_neg) < 1e-4:
         b_name = "Kelvin-"
         criterion = "Analytical boundary-trapped geostrophic match (Kelvin-)"
         restoring = "Gravity modified by rotation (Coriolis boundary trapping)"
         detail = "Decays outward from r1. Traces to counter-rotating hydrodynamic Kelvin wave as B0 -> 0."
-        confidence = "High (residual SVD < 1e-10)"
+        reason_class = "Geostrophic matching on boundaries and outward boundary-trapping decay conform exactly to the derived Kelvin wave profiles."
+        is_kelvin = True
     elif abs(eig - Oh_K_pos) < 1e-4:
         b_name = "Kelvin+"
         criterion = "Analytical boundary-trapped geostrophic match (Kelvin+)"
         restoring = "Gravity modified by rotation (Coriolis boundary trapping)"
         detail = "Decays inward from r2. Traces to co-rotating hydrodynamic Kelvin wave as B0 -> 0."
-        confidence = "High (residual SVD < 1e-10)"
+        reason_class = "Geostrophic matching on boundaries and inward boundary-trapping decay conform exactly to the derived Kelvin wave profiles."
+        is_kelvin = True
 
     # 2. Poincaré: matches Poincaré polished frequencies or lies in high-frequency fast inertia-gravity branch
-    else:
-        is_poincare = False
+    is_poincare = False
+    if not is_kelvin:
         if abs(eig - Oh_P_neg) < 1e-4 or abs(eig - Oh_P_pos) < 1e-4:
             is_poincare = True
         else:
             # Check tracing to B0 = 0
             traced = trace_eigenfrequency(eig, B0, 0.0, m)
             if traced is not None:
-                # Hydrodynamic Poincaré waves have |traced| >= 1.0 and crossings >= 1 (or 0 crossings for the lowest order co-rotating Poincaré mode which traces to ~1.74)
                 if abs(traced) >= 1.0:
                     is_poincare = True
 
@@ -618,91 +638,16 @@ for eig in all_eigs:
             criterion = "Global spectrum search (high-frequency wave branch match)"
             restoring = "Gravity and rotation (fast inertia-gravity branch)"
             detail = f"Matches the high-frequency Poincaré global spectrum with {crossings} radial crossings."
-            confidence = "High (residual SVD < 1e-10)"
+            reason_class = f"Traces to fast wave branches (|omega_traced| >= 1.0) in the hydrodynamic limit B0 -> 0, confirming fast gravity-inertial restoring mechanisms."
 
-        # 3. Slow-wave branches (Rossby, Magneto-Rossby, Magnetostrophic)
-        else:
-            ratio_E = hat_omA2 / (eig**2) if eig != 0 else np.inf
-
-            if B0 == 0:
-                # Hydrodynamic limit
-                if abs(gamma - (-1.0)) < 1e-3:
-                    # PV gradient is absent
-                    b_name = "Unclassified Slow"
-                    criterion = "PV-gradient absent (gamma = -1)"
-                    restoring = "None (restoring mechanism is absent)"
-                    detail = "Slow mode cannot be classified as Rossby because the background PV gradient is absent."
-                    confidence = "High (theoretical exact match)"
-                else:
-                    # Rossby waves are slow, retrograde, and PV-driven
-                    # retrograde for m > 0 is omega < 0 (negative phase speed)
-                    if eig < 0 and crossings >= 1:
-                        b_name = "Rossby"
-                        criterion = "Analytical Rossby dispersion & PV-gradient match"
-                        restoring = "Background potential vorticity (PV) gradient"
-                        detail = f"Slow retrograde wave matching classical Rossby theory with {crossings} crossings."
-                        confidence = "High (PV gradient active, matches WKB scale)"
-                        has_rossby = True
-                        rossby_type_modes.append({"eig": eig, "eta": eta, "branch": "Rossby"})
-                    else:
-                        b_name = "Unclassified Slow"
-                        criterion = "SWMHD slow wave categorization"
-                        restoring = "Aperiodic/decay or unrelated force balance"
-                        detail = "Slow mode with no matching physical branch."
-                        confidence = "Medium"
-            else:
-                # Magnetized Case (B0 > 0)
-                # Compare with Magneto-Rossby theory
-                # Must be predominantly kinetic: ratio_E < 0.2 (magnetic energy is secondary)
-                # Must require non-zero PV gradient: gamma != -1
-                # Must trace to classical Rossby waves as B0 -> 0 (which has crossings >= 1 and |traced| < 1.0)
-                is_magneto_rossby = False
-                if abs(gamma - (-1.0)) > 1e-3 and ratio_E < 0.2:
-                    traced = trace_eigenfrequency(eig, B0, 0.0, m)
-                    if traced is not None and traced < 0 and abs(traced) < 1.0:
-                        is_magneto_rossby = True
-
-                if is_magneto_rossby:
-                    sign_str = "+" if eig > 0 else "-"
-                    b_name = f"Magneto-Rossby{sign_str}"
-                    criterion = "PV-gradient driven slow branch (magnetic energy is secondary)"
-                    restoring = "Background potential-vorticity (PV) gradient (modified by magnetic tension)"
-                    detail = "Magneto-Rossby wave; continuously reduces to classical Rossby as B0 -> 0."
-                    confidence = "High (energy-partition and continuation verified)"
-                    has_magneto_rossby = True
-                    rossby_type_modes.append({"eig": eig, "eta": eta, "branch": "Magneto-Rossby"})
-
-                # Compare with Magnetostrophic theory
-                # Coriolis balanced by Lorentz force, PV gradient is negligible (may exist even if gamma = -1)
-                # Disappears completely in hydrodynamic limit (B0 -> 0)
-                # Energy oscillates symmetrically: ratio_E >= 0.9 (comparable or dominated by magnetic energy)
-                else:
-                    is_magnetostrophic = False
-                    if ratio_E >= 0.9:
-                        traced = trace_eigenfrequency(eig, B0, 0.0, m)
-                        # In the B0 -> 0 limit, magnetostrophic waves must completely disappear from the
-                        # slow PV-gradient driven branch.
-                        # Since classical Rossby frequencies are extremely slow (|traced| < 0.05),
-                        # if traced is None or |traced| >= 0.05, it confirms the mode is not Rossby-like,
-                        # hence it is driven purely by Coriolis-Lorentz (magnetostrophic) balance.
-                        if traced is None or abs(traced) >= 0.05:
-                            is_magnetostrophic = True
-
-                    if is_magnetostrophic:
-                        sign_str = "+" if eig > 0 else "-"
-                        b_name = f"Magnetostrophic{sign_str}"
-                        criterion = "Coriolis-Lorentz force balance (Ratio E_mag / E_kin >= 1.0)"
-                        restoring = "Coriolis force balanced by Lorentz force"
-                        detail = "Magnetostrophic wave; disappears or shifts to fast branch in the B0 -> 0 limit."
-                        confidence = "High (energy-partition and Coriolis-Lorentz limit verified)"
-                        has_magnetostrophic = True
-                        rossby_type_modes.append({"eig": eig, "eta": eta, "branch": "Magnetostrophic"})
-                    else:
-                        b_name = "Unclassified Slow"
-                        criterion = "SWMHD slow wave categorization"
-                        restoring = "None or unrelated force balance"
-                        detail = f"Slow mode with E_mag/E_kin = {ratio_E:.3f} and {crossings} crossings."
-                        confidence = "Medium"
+    # 3. Slow-wave branches (Rossby, Magneto-Rossby, Magnetostrophic)
+    if not is_kelvin and not is_poincare:
+        b_name = "Unclassified Slow (Theoretically Insufficient)"
+        criterion = "Theoretically Insufficient"
+        restoring = insufficiency_msg
+        detail = "This mode belongs to the slow-wave spectrum but cannot be rigorously classified as Rossby, Magneto-Rossby, or Magnetostrophic under the strict theory-driven framework."
+        reason_class = "The uploaded SWMHD manuscript does not derive the necessary diagnostics (energy functionals, force L2 norms, or spatial WKB averaging/comparison schemes) required to evaluate Rossby or Magnetostrophic criteria."
+        slow_modes_for_plotting.append({"eig": eig, "eta": eta, "b_r": b_r_complex, "b_th": b_th_complex})
 
     # Print to console
     print(f"  Oh = {eig: 11.8f}  |  Branch: {b_name:<16}  |  Residual SVD: {res_sig:.2e}")
@@ -720,31 +665,42 @@ for eig in all_eigs:
     report_lines.append(f"  Classification Criterion: {criterion}")
     report_lines.append(f"  Physical Restoring Mechanism: {restoring}")
     report_lines.append(f"  Details: {detail}")
-    report_lines.append(f"  Confidence: {confidence}")
+    report_lines.append(f"  Reason for Classification: {reason_class}")
+    report_lines.append(f"  Hydrodynamic Continuation limit (B0 -> 0):")
+    traced_limit = trace_eigenfrequency(eig, B0, 0.0, m)
+    if traced_limit is not None:
+        report_lines.append(f"    Converged successfully to limiting frequency: {traced_limit:.6f}")
+        # Check against hydrodynamic Rossby prediction
+        # WKB Rossby: -S_r / (4.0 + K_r)
+        # Note: comparison must declare theoretical insufficiency as spatial comparison is not derived
+        report_lines.append(f"    Hydrodynamic Rossby WKB comparison: {insufficiency_msg}")
+    else:
+        report_lines.append("    Disappears or leaves the slow-wave spectrum.")
+    report_lines.append(f"  Rossby WKB error: {insufficiency_msg}")
+    report_lines.append(f"  Magneto-Rossby WKB error: {insufficiency_msg}")
+    report_lines.append(f"  Magnetostrophic WKB error: {insufficiency_msg}")
+    report_lines.append(f"  Kinetic Energy: {insufficiency_msg}")
+    report_lines.append(f"  Magnetic Energy: {insufficiency_msg}")
+    report_lines.append(f"  Energy Ratio (Emag/Ekin): {insufficiency_msg}")
+    report_lines.append(f"  Force Norms (Coriolis, Lorentz, Pressure, PV-gradient): {insufficiency_msg}")
+    report_lines.append(f"  Force-balance residual: {insufficiency_msg}")
+    report_lines.append(f"  Final Confidence Score: {insufficiency_msg}")
     report_lines.append("--------------------------------------------------")
 
-# Summarize the Rossby finding strictly based on SWMHD theory:
-if B0 > 0:
-    if has_magneto_rossby:
-        conclusion_rossby = "Magneto-Rossby branch found."
-    elif has_magnetostrophic:
-        conclusion_rossby = (
-            "No Magneto-Rossby branch exists for the present governing equations and parameter set.\n\n"
-            "The detected slow branch satisfies the magnetostrophic balance and is therefore classified as a Magnetostrophic wave."
-        )
-    else:
-        conclusion_rossby = "No Rossby-type slow-wave branch exists for the present governing equations and parameter set."
-else:
-    if has_rossby:
-        conclusion_rossby = "Classical Rossby branch found."
-    else:
-        conclusion_rossby = "No Rossby-wave branch exists for the present governing equations and parameter set."
+conclusion_txt = (
+    "Due to the strict theoretical requirements of the SWMHD framework, "
+    "empirical and heuristic frequency thresholds have been removed.\n"
+    "Because the uploaded manuscript does not derive energy integrals, "
+    "L2 force norms, or spatial WKB averaging comparison metrics, "
+    "the slow-wave modes cannot be classified as Rossby, Magneto-Rossby, or Magnetostrophic.\n\n"
+    "They are rigorously classified as Unclassified Slow (Theoretically Insufficient) pending further theoretical derivation."
+)
 
-print(conclusion_rossby)
+print(conclusion_txt)
 print("="*60)
 
 report_lines.append("FINAL CONCLUSION:")
-report_lines.append(conclusion_rossby)
+report_lines.append(conclusion_txt)
 
 # Write report to file
 report_path = "outputs/branch_classification_report.txt"
@@ -753,29 +709,24 @@ with open(report_path, "w") as f_rep:
 print(f"Autoritative classification report saved to: {report_path}")
 
 # ==============================================================================
-# 12. If any Rossby-type branch exists, perform automatic visualization
+# 12. Automated Visualization of Complete Eigenmodes
 # ==============================================================================
-if len(rossby_type_modes) > 0:
-    print(f"\nFound {len(rossby_type_modes)} Rossby-type slow-wave modes. Generating automatic plots...")
-    for idx, mode in enumerate(rossby_type_modes):
+if len(slow_modes_for_plotting) > 0:
+    print(f"\nFound {len(slow_modes_for_plotting)} slow-wave modes. Generating complete visualizations...")
+    for idx, mode in enumerate(slow_modes_for_plotting):
         r_eig = mode["eig"]
         r_eta = mode["eta"]
-        r_branch = mode["branch"]
+        r_br = mode["b_r"]
+        r_bth = mode["b_th"]
 
-        # Orient signs consistently so that eta has positive amplitude at boundaries
+        # Consistent sign orientation
         if r_eta[0] < 0:
             r_eta *= -1
+            r_br *= -1
+            r_bth *= -1
 
-        # Select naming convention based on detected branch
-        if r_branch == "Rossby":
-            lbl = "Rossby Mode"
-            filename = f"outputs/rossby_mode_{idx+1}.png"
-        elif r_branch == "Magneto-Rossby":
-            lbl = "Magneto-Rossby Mode"
-            filename = f"outputs/magneto_rossby_mode_{idx+1}.png"
-        else: # Magnetostrophic
-            lbl = "Magnetostrophic Mode"
-            filename = f"outputs/magnetostrophic_mode_{idx+1}.png"
+        lbl = "Unclassified Slow Mode"
+        filename = f"outputs/unclassified_slow_mode_{idx+1}.png"
 
         # Plot utilizing the same high-resolution plotting pipeline
         create_standalone_plot(
@@ -787,8 +738,40 @@ if len(rossby_type_modes) > 0:
             eta_lim=[-1.2, 1.2],
             u0_lim=[0.0, 0.25],
             target_max_u0=0.20,
-            show_ticks=True, # Magnetostrophic / slow modes show coordinate ticks
+            show_ticks=True,
             inset_loc=(0.0, 0.08, 1.0, 1.0)
         )
+
+        # Additional figure showing b_r(r) and b_theta(r) matching the publication style
+        bfield_filename = f"outputs/unclassified_slow_bfields_{idx+1}.png"
+
+        fig, ax = plt.subplots(figsize=(6.5, 5))
+        r_prime = (xg - hat_r1) / (hat_r2 - hat_r1)
+        r_prime_fine = np.linspace(0, 1, 200)
+        r_fine_hat = r_prime_fine * (hat_r2 - hat_r1) + hat_r1
+
+        # Interpolate reconstructed magnetic fields to fine grid
+        br_fine = bary_interp(r_fine_hat, xg, r_br.real)
+        bth_fine = bary_interp(r_fine_hat, xg, r_bth.real)
+
+        # Normalize for plotting so peak magnitude is clear
+        peak_b = max(np.max(np.abs(br_fine)), np.max(np.abs(bth_fine))) or 1.0
+        br_fine /= peak_b
+        bth_fine /= peak_b
+
+        ax.plot(r_prime_fine, br_fine, color='#1f77b4', lw=2.2, label=r'$\tilde{b}_r$')
+        ax.plot(r_prime_fine, bth_fine, color='black', lw=2.0, ls='--', label=r'$\tilde{b}_\theta$')
+        ax.axhline(0, color='grey', lw=0.7, ls=':')
+
+        ax.set_xlim(0, 1)
+        ax.set_xlabel(r"$r'=(r-r_1)/\Delta r$", fontsize=12)
+        ax.set_ylabel("Normalized Magnetic Perturbation", fontsize=12)
+        ax.set_title(rf"$\sigma_{{{m},1}}^{{US+}} = {r_eig:.4f}f_e$ (Magnetic Profiles)", fontsize=12)
+        ax.legend(loc="upper right", frameon=True, fontsize=11)
+
+        plt.tight_layout()
+        plt.savefig(bfield_filename, dpi=180, bbox_inches='tight')
+        plt.close()
+        print(f"Saved: {bfield_filename}")
 else:
-    print("\nNo Rossby-type slow-wave branch exists for the present governing equations and parameter set.")
+    print("\nNo slow-wave branch exists for the present governing equations and parameter set.")
