@@ -75,13 +75,11 @@ def cheb(N_grid, a, b):
     xi = np.cos(j * np.pi / (N_grid - 1))
     c = np.ones(N_grid)
     c[0] = 2; c[-1] = 2
-    X = np.tile(xi, (N_grid, 1))
-    dX = X - X.T
     D = np.zeros((N_grid, N_grid))
     for i in range(N_grid):
         for k in range(N_grid):
             if i != k:
-                D[i, k] = (c[i] / c[k]) / dX[i, k]
+                D[i, k] = (c[i] / c[k]) * ((-1)**(i+k)) / (xi[i] - xi[k])
     D -= np.diag(D.sum(axis=1))
     sc = 2.0 / (b - a)
     D1 = sc * D
@@ -214,20 +212,20 @@ eta_K_neg, _, _, _ = get_analytical_kelvin_fields(Oh_K_neg, m, xg, 0.35)
 if eta_K_neg[0] < 0:
     eta_K_neg *= -1
 
-# 2. Kelvin co-rotating (approx 1.596)
-Oh_K_pos = find_eigenvalue(1.596, m)
+# 2. Kelvin co-rotating (approx 1.67)
+Oh_K_pos = find_eigenvalue(1.67, m)
 eta_K_pos, _, _, _ = get_analytical_kelvin_fields(Oh_K_pos, m, xg, 0.10)
 if eta_K_pos[0] < 0:
     eta_K_pos *= -1
 
-# 3. Poincaré counter-rotating (approx -5.1077)
-Oh_P_neg = find_eigenvalue(-5.1077, m)
+# 3. Poincaré counter-rotating (approx -4.88)
+Oh_P_neg = find_eigenvalue(-4.88, m)
 eta_P_neg = extract_eta(Oh_P_neg, m)
 if eta_P_neg[0] > 0:
     eta_P_neg *= -1
 
-# 4. Poincaré co-rotating (approx 5.1080)
-Oh_P_pos = find_eigenvalue(5.1080, m)
+# 4. Poincaré co-rotating (approx 5.04)
+Oh_P_pos = find_eigenvalue(5.04, m)
 eta_P_pos = extract_eta(Oh_P_pos, m)
 if eta_P_pos[0] > 0:
     eta_P_pos *= -1
@@ -423,8 +421,8 @@ create_standalone_plot(
     m_val=m,
     label="Poincaré Counter-Rotating",
     filename="outputs/poincare_counter_rotating.png",
-    eta_lim=[-6.0, 0.0],
-    u0_lim=[-0.4, 0.2],
+    eta_lim=[-1.2, 1.2],
+    u0_lim=[0.0, 0.25],
     target_max_u0=0.20,
     show_ticks=False,
     inset_loc=(-0.1, 0.08, 1.0, 1.0)
@@ -436,8 +434,8 @@ create_standalone_plot(
     m_val=m,
     label="Poincaré Co-Rotating",
     filename="outputs/poincare_co_rotating.png",
-    eta_lim=[-6.0, 0.0],
-    u0_lim=[-0.4, 0.2],
+    eta_lim=[-1.2, 1.2],
+    u0_lim=[0.0, 0.25],
     target_max_u0=0.20,
     show_ticks=True,
     inset_loc=(0.0, 0.08, 1.0, 1.0)
