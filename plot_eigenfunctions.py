@@ -587,15 +587,17 @@ for eig in all_eigs:
     # Target max u0 is 1.0 for the raw numerical values
     v_r, v_th, u0 = reconstruct_velocity(eig, m, eta, 1.0)
 
+    # Scale to physical velocity perturbations (m/s) using r0 * Omega
+    v_r_phys = v_r * (r0 * Omega)
+    v_th_phys = v_th * (r0 * Omega)
+
     # Rigorous reconstruction of magnetic fields from the derived SWMHD induction relations
-    # b_r = -i * (r0 / (2 * Oh * H0)) * v_r
-    # b_theta = -i * (r0 / (2 * Oh * H0)) * v_theta
-    # To handle potential division by zero if Oh is extremely close to 0:
+    # b_r = i * B0 / (omega * H0) * v_r_phys = i * B0 / (2 * Omega * eig * H0) * v_r_phys
     if abs(eig) > 1e-5:
-        # Note: we use complex type to store the exact fields before taking real/magnitude
-        factor = -1j * (r0 / (2.0 * eig * H0))
-        b_r_complex = factor * v_r
-        b_th_complex = factor * v_th
+        # factor is 1j * B0 / (2.0 * Omega * eig * H0) in SI units (Tesla)
+        factor = 1j * B0 / (2.0 * Omega * eig * H0)
+        b_r_complex = factor * v_r_phys
+        b_th_complex = factor * v_th_phys
     else:
         b_r_complex = np.zeros_like(v_r, dtype=complex)
         b_th_complex = np.zeros_like(v_th, dtype=complex)
@@ -750,22 +752,30 @@ if len(slow_modes_for_plotting) > 0:
         r_prime_fine = np.linspace(0, 1, 200)
         r_fine_hat = r_prime_fine * (hat_r2 - hat_r1) + hat_r1
 
-        # Interpolate reconstructed magnetic fields to fine grid
-        br_fine = bary_interp(r_fine_hat, xg, r_br.real)
-        bth_fine = bary_interp(r_fine_hat, xg, r_bth.real)
+        # Compute absolute magnitudes of reconstructed complex magnetic fields
+        br_mag = np.abs(r_br)
+        bth_mag = np.abs(r_bth)
 
-        # Normalize for plotting so peak magnitude is clear
-        peak_b = max(np.max(np.abs(br_fine)), np.max(np.abs(bth_fine))) or 1.0
-        br_fine /= peak_b
-        bth_fine /= peak_b
+        # Interpolate magnetic perturbation magnitudes to fine grid
+        br_fine = bary_interp(r_fine_hat, xg, br_mag)
+        bth_fine = bary_interp(r_fine_hat, xg, bth_mag)
 
-        ax.plot(r_prime_fine, br_fine, color='#1f77b4', lw=2.2, label=r'$\tilde{b}_r$')
-        ax.plot(r_prime_fine, bth_fine, color='black', lw=2.0, ls='--', label=r'$\tilde{b}_\theta$')
+        # Normalize only for plotting so peak magnitude is clear
+        peak_b = max(np.max(br_fine), np.max(bth_fine))
+        if peak_b > 0.0:
+            br_plot = br_fine / peak_b
+            bth_plot = bth_fine / peak_b
+        else:
+            br_plot = br_fine
+            bth_plot = bth_fine
+
+        ax.plot(r_prime_fine, br_plot, color='#1f77b4', lw=2.2, label=r'$|\tilde{b}_r|$')
+        ax.plot(r_prime_fine, bth_plot, color='black', lw=2.0, ls='--', label=r'$|\tilde{b}_\theta|$')
         ax.axhline(0, color='grey', lw=0.7, ls=':')
 
         ax.set_xlim(0, 1)
         ax.set_xlabel(r"$r'=(r-r_1)/\Delta r$", fontsize=12)
-        ax.set_ylabel("Normalized Magnetic Perturbation", fontsize=12)
+        ax.set_ylabel("Normalized Magnetic Perturbation Magnitude", fontsize=12)
         ax.set_title(rf"$\sigma_{{{m},1}}^{{US+}} = {r_eig:.4f}f_e$ (Magnetic Profiles)", fontsize=12)
         ax.legend(loc="upper right", frameon=True, fontsize=11)
 
