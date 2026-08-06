@@ -493,6 +493,125 @@ def create_standalone_plot(Oh, eta, m_val, label, filename, eta_lim, u0_lim, tar
     plt.close()
     print(f"Saved: {filename}")
 
+
+def create_complete_mode_profile(Oh, eta, m_val, label, filename):
+    """
+    Generate and save a publication-quality 3-panel stacked plot (surface displacement,
+    velocity magnitude, magnetic field magnitude) for a single mode.
+    """
+    # Coordinates mapping: r' in [0, 1]
+    r_prime_fine = np.linspace(0, 1, 200)
+    r_fine_hat = r_prime_fine * (hat_r2 - hat_r1) + hat_r1
+
+    # Reconstruct fields on the fine grid
+    if 'Kelvin' in label:
+        eta_fine, vr_fine, vth_fine, u0_fine = get_analytical_kelvin_fields(Oh, m_val, r_fine_hat, 1.0)
+        # Scale to physical velocity perturbations
+        v_r_phys = vr_fine * (r0 * Omega)
+        v_th_phys = vth_fine * (r0 * Omega)
+        if abs(Oh) > 1e-5:
+            factor = 1j * B0 / (2.0 * Omega * Oh * H0)
+            b_r_complex = factor * v_r_phys
+            b_th_complex = factor * v_th_phys
+        else:
+            b_r_complex = np.zeros_like(vr_fine, dtype=complex)
+            b_th_complex = np.zeros_like(vth_fine, dtype=complex)
+        b_mag_fine = np.sqrt(np.abs(b_r_complex)**2 + np.abs(b_th_complex)**2)
+    else:
+        eta_fine = bary_interp(r_fine_hat, xg, eta)
+        v_r, v_th, u0 = reconstruct_velocity(Oh, m_val, eta, 1.0)
+        v_r_phys = v_r * (r0 * Omega)
+        v_th_phys = v_th * (r0 * Omega)
+        if abs(Oh) > 1e-5:
+            factor = 1j * B0 / (2.0 * Omega * Oh * H0)
+            b_r_complex = factor * v_r_phys
+            b_th_complex = factor * v_th_phys
+        else:
+            b_r_complex = np.zeros_like(v_r, dtype=complex)
+            b_th_complex = np.zeros_like(v_th, dtype=complex)
+
+        vr_fine = bary_interp(r_fine_hat, xg, v_r_phys)
+        vth_fine = bary_interp(r_fine_hat, xg, v_th_phys)
+
+        br_mag = np.abs(b_r_complex)
+        bth_mag = np.abs(b_th_complex)
+        br_fine = bary_interp(r_fine_hat, xg, br_mag)
+        bth_fine = bary_interp(r_fine_hat, xg, bth_mag)
+
+        u0_fine = np.sqrt(np.abs(vr_fine)**2 + np.abs(vth_fine)**2)
+        b_mag_fine = np.sqrt(br_fine**2 + bth_fine**2)
+
+    # Normalize each curve independently
+    eta_max = np.max(np.abs(eta_fine))
+    if eta_max > 0:
+        eta_plot = eta_fine / eta_max
+    else:
+        eta_plot = eta_fine
+
+    u0_max = np.max(u0_fine)
+    if u0_max > 0:
+        u0_plot = u0_fine / u0_max
+    else:
+        u0_plot = u0_fine
+
+    b_mag_max = np.max(b_mag_fine)
+    if b_mag_max > 0:
+        b_mag_plot = b_mag_fine / b_mag_max
+    else:
+        b_mag_plot = b_mag_fine
+
+    # Create the 3-panel stacked plot
+    fig, axes = plt.subplots(3, 1, figsize=(7, 9), sharex=True)
+    fig.subplots_adjust(hspace=0.08)
+
+    # Titles and LaTeX formatting consistent with existing notation
+    if 'Kelvin' in label:
+        sup = 'K-' if 'Counter' in label else 'K+'
+        sub = f'{m_val}'
+    elif 'Poincaré' in label:
+        sup = 'P-' if 'Counter' in label else 'P+'
+        sub = f'{m_val},1'
+    elif 'Magneto-Rossby' in label or 'Rossby' in label:
+        sup = 'MR-' if 'Counter' in label or Oh < 0 else 'MR+'
+        sub = f'{m_val},1'
+    else: # Magnetostrophic
+        sup = 'MS-' if 'Counter' in label or Oh < 0 else 'MS+'
+        sub = f'{m_val},1'
+
+    title_str = rf"$\sigma_{{{sub}}}^{{{sup}}} = {Oh:.4f}f_e$ ({label})"
+    fig.suptitle(title_str, fontsize=14, y=0.94)
+
+    # Panel 1: Surface Displacement
+    axes[0].plot(r_prime_fine, eta_plot, color='#1f77b4', lw=2.2, label=r'$\tilde{\eta}$')
+    axes[0].axhline(0, color='grey', lw=0.7, ls=':')
+    axes[0].set_ylabel("Normalized Surface\nDisplacement", fontsize=11)
+    axes[0].set_ylim(-1.1, 1.1)
+    axes[0].grid(True, alpha=0.3, ls=':')
+    axes[0].legend(loc="upper right", frameon=True, fontsize=11)
+
+    # Panel 2: Velocity Magnitude
+    axes[1].plot(r_prime_fine, u0_plot, color='black', lw=2.0, label=r'$|\tilde{u}|$')
+    axes[1].set_ylabel("Normalized Velocity\nMagnitude", fontsize=11)
+    axes[1].set_ylim(-0.1, 1.1)
+    axes[1].grid(True, alpha=0.3, ls=':')
+    axes[1].legend(loc="upper right", frameon=True, fontsize=11)
+
+    # Panel 3: Magnetic Field Magnitude
+    axes[2].plot(r_prime_fine, b_mag_plot, color='red', lw=2.0, label=r'$|\tilde{B}|$')
+    axes[2].set_ylabel("Normalized Magnetic\nField Magnitude", fontsize=11)
+    axes[2].set_ylim(-0.1, 1.1)
+    axes[2].grid(True, alpha=0.3, ls=':')
+    axes[2].legend(loc="upper right", frameon=True, fontsize=11)
+
+    # X-axis label on bottom panel
+    axes[2].set_xlim(0, 1)
+    axes[2].set_xlabel(r"$r'=(r-r_1)/\Delta r$", fontsize=12)
+
+    plt.savefig(filename, dpi=180, bbox_inches='tight')
+    plt.close()
+    print(f"Saved: {filename}")
+
+
 # ==============================================================================
 # 10. Generate the Four Standalone Figure Plots for Kelvin & Poincaré
 # ==============================================================================
@@ -509,6 +628,14 @@ create_standalone_plot(
     inset_loc=(-0.15, 0.02, 1.0, 1.0)
 )
 
+create_complete_mode_profile(
+    Oh=Oh_K_neg,
+    eta=eta_K_neg,
+    m_val=m,
+    label="Kelvin Counter-Rotating",
+    filename="outputs/kelvin_counter_complete_profile.png"
+)
+
 create_standalone_plot(
     Oh=Oh_K_pos,
     eta=eta_K_pos,
@@ -520,6 +647,14 @@ create_standalone_plot(
     target_max_u0=0.10,
     show_ticks=True,
     inset_loc=(0.0, 0.02, 1.0, 1.0)
+)
+
+create_complete_mode_profile(
+    Oh=Oh_K_pos,
+    eta=eta_K_pos,
+    m_val=m,
+    label="Kelvin Co-Rotating",
+    filename="outputs/kelvin_co_complete_profile.png"
 )
 
 create_standalone_plot(
@@ -535,6 +670,14 @@ create_standalone_plot(
     inset_loc=(-0.1, 0.08, 1.0, 1.0)
 )
 
+create_complete_mode_profile(
+    Oh=Oh_P_neg,
+    eta=eta_P_neg,
+    m_val=m,
+    label="Poincaré Counter-Rotating",
+    filename="outputs/poincare_counter_complete_profile.png"
+)
+
 create_standalone_plot(
     Oh=Oh_P_pos,
     eta=eta_P_pos,
@@ -546,6 +689,14 @@ create_standalone_plot(
     target_max_u0=0.20,
     show_ticks=True,
     inset_loc=(0.0, 0.08, 1.0, 1.0)
+)
+
+create_complete_mode_profile(
+    Oh=Oh_P_pos,
+    eta=eta_P_pos,
+    m_val=m,
+    label="Poincaré Co-Rotating",
+    filename="outputs/poincare_co_complete_profile.png"
 )
 
 print("\nDone generating all four standalone plots for Kelvin & Poincaré!")
@@ -742,6 +893,16 @@ if len(slow_modes_for_plotting) > 0:
             target_max_u0=0.20,
             show_ticks=True,
             inset_loc=(0.0, 0.08, 1.0, 1.0)
+        )
+
+        # Plot complete 3-panel profile
+        complete_filename = f"outputs/unclassified_slow_complete_profile_{idx+1}.png"
+        create_complete_mode_profile(
+            Oh=r_eig,
+            eta=r_eta,
+            m_val=m,
+            label="Unclassified Slow Mode",
+            filename=complete_filename
         )
 
         # Additional figure showing b_r(r) and b_theta(r) matching the publication style
