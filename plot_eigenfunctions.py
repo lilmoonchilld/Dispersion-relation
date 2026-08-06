@@ -247,7 +247,7 @@ os.makedirs("outputs", exist_ok=True)
 # ==============================================================================
 # 9. Core Plotting Routine for Standalone Figures
 # ==============================================================================
-def create_standalone_plot(Oh, eta, m_val, label, filename, eta_lim, u0_lim, target_max_u0, show_ticks, inset_loc, cmap='RdBu_r'):
+def create_standalone_plot(Oh, eta, m_val, label, filename, eta_lim, u0_lim, target_max_u0, show_ticks, inset_loc, cmap='viridis'):
     """
     Generate and save a standalone, publication-quality 1D radial + 2D polar plot for a single mode.
     """
@@ -348,14 +348,18 @@ def create_standalone_plot(Oh, eta, m_val, label, filename, eta_lim, u0_lim, tar
     eta_max = np.max(np.abs(ETA2D)) or 1.0
     norm = TwoSlopeNorm(vmin=-eta_max, vcenter=0, vmax=eta_max)
 
-    pc = ax_polar.pcolormesh(X2D, Y2D, ETA2D, cmap=cmap, norm=norm, shading='auto', zorder=1)
+    # Use contour lines instead of pcolormesh gradient to match the publication style
+    levels = np.linspace(-eta_max, eta_max, 21)
+    ax_polar.contour(X2D, Y2D, ETA2D, levels=levels, cmap=cmap, norm=norm, linewidths=2.0, zorder=1)
 
-    # Add symmetrical vertical colorbar to the right of the polar plot
+    # Add symmetrical vertical colorbar to the right of the polar plot with a continuous solid gradient
     cax = inset_axes(ax_polar, width="8%", height="100%", loc='right',
                      bbox_to_anchor=(0.12, 0., 1.0, 1.0),
                      bbox_transform=ax_polar.transAxes,
                      borderpad=0)
-    cb = fig.colorbar(pc, cax=cax, orientation='vertical')
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array([])
+    cb = fig.colorbar(sm, cax=cax, orientation='vertical')
     cb.set_ticks([-eta_max, 0, eta_max])
     cb.set_ticklabels(['-1', '0', '1'])
     cb.ax.tick_params(labelsize=8)
