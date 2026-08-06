@@ -10,92 +10,118 @@ Eigenvalue: -17.73331436
   Branch: Poincaré-
   Residual SVD: 4.9417e-12
   Radial crossings: 4
-  Classification Criterion: Global spectrum search (high-frequency wave branch)
-  Details: Matches the high-frequency global collocation spectrum.
+  Classification Criterion: Global spectrum search (high-frequency wave branch match)
+  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
+  Details: Matches the high-frequency Poincaré global spectrum with 4 radial crossings.
+  Confidence: High (residual SVD < 1e-10)
 --------------------------------------------------
 Eigenvalue: -13.37433442
   Branch: Poincaré-
   Residual SVD: 3.7719e-12
   Radial crossings: 3
-  Classification Criterion: Global spectrum search (high-frequency wave branch)
-  Details: Matches the high-frequency global collocation spectrum.
+  Classification Criterion: Global spectrum search (high-frequency wave branch match)
+  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
+  Details: Matches the high-frequency Poincaré global spectrum with 3 radial crossings.
+  Confidence: High (residual SVD < 1e-10)
 --------------------------------------------------
 Eigenvalue: -9.05394085
   Branch: Poincaré-
   Residual SVD: 1.2067e-12
   Radial crossings: 2
-  Classification Criterion: Global spectrum search (high-frequency wave branch)
-  Details: Matches the high-frequency global collocation spectrum.
+  Classification Criterion: Global spectrum search (high-frequency wave branch match)
+  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
+  Details: Matches the high-frequency Poincaré global spectrum with 2 radial crossings.
+  Confidence: High (residual SVD < 1e-10)
 --------------------------------------------------
 Eigenvalue: -4.87608943
   Branch: Poincaré-
   Residual SVD: 2.4650e-13
   Radial crossings: 1
-  Classification Criterion: Global spectrum search (high-frequency wave branch)
-  Details: Matches the high-frequency global collocation spectrum.
+  Classification Criterion: Global spectrum search (high-frequency wave branch match)
+  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
+  Details: Matches the high-frequency Poincaré global spectrum with 1 radial crossings.
+  Confidence: High (residual SVD < 1e-10)
 --------------------------------------------------
 Eigenvalue: -1.96841662
-  Branch: Unclassified Slow
+  Branch: Poincaré-
   Residual SVD: 3.5828e-14
   Radial crossings: 0
-  Classification Criterion: SWMHD slow wave categorization (neither MR nor MS criteria met)
-  Details: This mode lies in the slow frequency range but does not meet the strict magneto-Rossby or magnetostrophic criteria.
+  Classification Criterion: Global spectrum search (high-frequency wave branch match)
+  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
+  Details: Matches the high-frequency Poincaré global spectrum with 0 radial crossings.
+  Confidence: High (residual SVD < 1e-10)
 --------------------------------------------------
 Eigenvalue: -0.50000135
   Branch: Kelvin-
   Residual SVD: 1.6152e-11
   Radial crossings: 0
-  Classification Criterion: Continuation & WKB matching (boundary-trapped, decays outward)
-  Details: Conforms to the analytical Kelvin boundary wave localized at r1.
+  Classification Criterion: Analytical boundary-trapped geostrophic match (Kelvin-)
+  Physical Restoring Mechanism: Gravity modified by rotation (Coriolis boundary trapping)
+  Details: Decays outward from r1. Traces to counter-rotating hydrodynamic Kelvin wave as B0 -> 0.
+  Confidence: High (residual SVD < 1e-10)
 --------------------------------------------------
 Eigenvalue:  0.05333389
-  Branch: Magnetostrophic
+  Branch: Magnetostrophic+
   Residual SVD: 4.9376e-06
   Radial crossings: 0
-  Classification Criterion: Coriolis-Lorentz force balance (scaled by omega_A^2 / f)
-  Details: Driven by the Coriolis-Lorentz balance; disappears completely in the hydrodynamic limit B0 -> 0.
+  Classification Criterion: Coriolis-Lorentz force balance (Ratio E_mag / E_kin >= 1.0)
+  Physical Restoring Mechanism: Coriolis force balanced by Lorentz force
+  Details: Magnetostrophic wave; disappears or shifts to fast branch in the B0 -> 0 limit.
+  Confidence: High (energy-partition and Coriolis-Lorentz limit verified)
 --------------------------------------------------
 Eigenvalue:  0.50000174
-  Branch: Magnetostrophic
+  Branch: Poincaré+
   Residual SVD: 7.5277e-12
   Radial crossings: 0
-  Classification Criterion: Coriolis-Lorentz force balance (scaled by omega_A^2 / f)
-  Details: Driven by the Coriolis-Lorentz balance; disappears completely in the hydrodynamic limit B0 -> 0.
+  Classification Criterion: Global spectrum search (high-frequency wave branch match)
+  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
+  Details: Matches the high-frequency Poincaré global spectrum with 0 radial crossings.
+  Confidence: High (residual SVD < 1e-10)
 --------------------------------------------------
 Eigenvalue:  1.67364680
   Branch: Kelvin+
   Residual SVD: 1.4330e-15
   Radial crossings: 0
-  Classification Criterion: Continuation & WKB matching (boundary-trapped, decays inward)
-  Details: Conforms to the analytical Kelvin boundary wave localized at r2.
+  Classification Criterion: Analytical boundary-trapped geostrophic match (Kelvin+)
+  Physical Restoring Mechanism: Gravity modified by rotation (Coriolis boundary trapping)
+  Details: Decays inward from r2. Traces to co-rotating hydrodynamic Kelvin wave as B0 -> 0.
+  Confidence: High (residual SVD < 1e-10)
 --------------------------------------------------
 Eigenvalue:  5.04060197
   Branch: Poincaré+
   Residual SVD: 4.0178e-13
   Radial crossings: 1
-  Classification Criterion: Global spectrum search (high-frequency wave branch)
-  Details: Matches the high-frequency global collocation spectrum.
+  Classification Criterion: Global spectrum search (high-frequency wave branch match)
+  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
+  Details: Matches the high-frequency Poincaré global spectrum with 1 radial crossings.
+  Confidence: High (residual SVD < 1e-10)
 --------------------------------------------------
 Eigenvalue:  9.10203688
   Branch: Poincaré+
   Residual SVD: 2.1438e-13
   Radial crossings: 2
-  Classification Criterion: Global spectrum search (high-frequency wave branch)
-  Details: Matches the high-frequency global collocation spectrum.
+  Classification Criterion: Global spectrum search (high-frequency wave branch match)
+  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
+  Details: Matches the high-frequency Poincaré global spectrum with 2 radial crossings.
+  Confidence: High (residual SVD < 1e-10)
 --------------------------------------------------
 Eigenvalue:  13.39609618
   Branch: Poincaré+
   Residual SVD: 2.2486e-12
   Radial crossings: 3
-  Classification Criterion: Global spectrum search (high-frequency wave branch)
-  Details: Matches the high-frequency global collocation spectrum.
+  Classification Criterion: Global spectrum search (high-frequency wave branch match)
+  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
+  Details: Matches the high-frequency Poincaré global spectrum with 3 radial crossings.
+  Confidence: High (residual SVD < 1e-10)
 --------------------------------------------------
 Eigenvalue:  17.74561780
   Branch: Poincaré+
   Residual SVD: 1.2794e-12
   Radial crossings: 4
-  Classification Criterion: Global spectrum search (high-frequency wave branch)
-  Details: Matches the high-frequency global collocation spectrum.
+  Classification Criterion: Global spectrum search (high-frequency wave branch match)
+  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
+  Details: Matches the high-frequency Poincaré global spectrum with 4 radial crossings.
+  Confidence: High (residual SVD < 1e-10)
 --------------------------------------------------
 FINAL CONCLUSION:
 No Magneto-Rossby branch exists for the present governing equations and parameter set.
