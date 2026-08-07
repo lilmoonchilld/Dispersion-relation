@@ -39,6 +39,7 @@ r1 = 0.5e6           # inner radius [m]
 r2 = 1.0e6           # outer radius [m]
 N = 32               # grid resolution
 m = 2                # azimuthal mode number
+SLOW_MODE_N = 0      # radial mode number to visualize for slow waves
 
 # Global scan range boundaries
 OMEGA_SCAN_MIN = -20.0
@@ -370,6 +371,7 @@ class SWMHDMode:
         self.classification = "Unclassified (Theory Incomplete)"
         self.continuation = None
         self.diagnostics = {}
+        self.kr = None
 
 def construct_mode_object(Oh, eta, m_val, label=""):
     """Instantiates a SWMHDMode object."""
@@ -397,7 +399,7 @@ def evaluate_rossby_diagnostics(mode):
 
 def compute_local_radial_wavenumber(omega, k, r):
     """
-    Evaluates local radial wavenumber k_r from the theoretical SWMHD WKB dispersion relation:
+    Evaluates local radial wavenumber squared k_r^2 from the theoretical SWMHD WKB dispersion relation:
     k_r^2 = 4*omega*(omega_star^2 - 1)/(omega_star * hat_c0sq) - k^2/r^2
             - (1+gamma)*(2*r - 1)/(hat_c0sq * r)
             - k*(1+gamma)*(r - 1)/(omega_star * hat_c0sq * r)
@@ -413,10 +415,7 @@ def compute_local_radial_wavenumber(omega, k, r):
     term3 = - (1.0 + gamma) * (2.0 * r - 1.0) / (hat_c0sq * r)
     term4 = - k * (1.0 + gamma) * (r - 1.0) / (ws * hat_c0sq * r)
     kr2 = term1 + term2 + term3 + term4
-    if kr2 >= 0:
-        return np.sqrt(kr2)
-    else:
-        return np.nan # Evanescent wave
+    return kr2
 
 # ==============================================================================
 # 6.6. SWMHD Theory-Driven Classification (Parts I & IV)
@@ -458,6 +457,16 @@ def classify_mode_by_theory(mode):
             # Slow-wave branch where the current SWMHD manuscript does not derive
             # a complete verification theory.
             mode.classification = "Unclassified (Theory Incomplete)"
+
+    # Assign n based on classification: auto-counted for Kelvin/Poincaré, SLOW_MODE_N for slow modes (Part III/VII)
+    if 'Kelvin' in mode.classification or 'Poincaré' in mode.classification:
+        pass # keep automatic node count
+    else:
+        mode.n = SLOW_MODE_N
+        # Immediately compute kr over the entire Chebyshev grid for slow waves only (Part VI)
+        mode.kr = np.zeros_like(xg)
+        for i in range(len(xg)):
+            mode.kr[i] = compute_local_radial_wavenumber(mode.frequency, mode.k, xg[i])
 
 # ==============================================================================
 # 7. Locate and Polish the Four Target Modes
@@ -669,8 +678,8 @@ def create_standalone_plot(mode, filename, eta_lim, u0_lim, target_max_u0, show_
 
 def create_complete_mode_profile(mode, filename):
     """
-    Generate and save a publication-quality 3-panel stacked plot (surface displacement,
-    velocity magnitude, magnetic field magnitude) consuming a SWMHDMode object.
+    Generate and save a publication-quality stacked plot consuming a SWMHDMode object.
+    Uses 3 panels for Kelvin/Poincaré, and an extended 4 panels for slow waves.
     """
     # Coordinates mapping: r' in [0, 1]
     r_prime_fine = np.linspace(0, 1, 200)
@@ -713,11 +722,7 @@ def create_complete_mode_profile(mode, filename):
     b_mag_max = np.max(b_mag_fine)
     b_mag_plot = b_mag_fine / b_mag_max if b_mag_max > 0 else b_mag_fine
 
-    # Create the 3-panel stacked plot
-    fig, axes = plt.subplots(3, 1, figsize=(7, 9), sharex=True)
-    fig.subplots_adjust(hspace=0.08)
-
-    # Titles and LaTeX formatting consistent with existing notation (Part VIII)
+    # Subplot titles and LaTeX formatting consistent with notation (Part VIII)
     if 'Kelvin' in mode.classification:
         sup = 'K-' if '-' in mode.classification or mode.frequency < 0 else 'K+'
         sub = f'{mode.k}'
@@ -729,33 +734,78 @@ def create_complete_mode_profile(mode, filename):
         sub = f'({mode.k},{mode.n})'
 
     title_str = rf"$\sigma_{{{sub}}}^{{{sup}}} = {mode.frequency:.4f}f_e$ ({mode.label})"
-    fig.suptitle(title_str, fontsize=14, y=0.94)
 
-    # Panel 1: Surface Displacement
-    axes[0].plot(r_prime_fine, eta_plot, color='#1f77b4', lw=2.2, label=r'$\tilde{\eta}$')
-    axes[0].axhline(0, color='grey', lw=0.7, ls=':')
-    axes[0].set_ylabel("Normalized Surface\nDisplacement", fontsize=11)
-    axes[0].set_ylim(-1.1, 1.1)
-    axes[0].grid(True, alpha=0.3, ls=':')
-    axes[0].legend(loc="upper right", frameon=True, fontsize=11)
+    if 'Kelvin' in mode.classification or 'Poincaré' in mode.classification:
+        # Create the 3-panel stacked plot (exactly as is, bitwise identical)
+        fig, axes = plt.subplots(3, 1, figsize=(7, 9), sharex=True)
+        fig.subplots_adjust(hspace=0.08)
+        fig.suptitle(title_str, fontsize=14, y=0.94)
 
-    # Panel 2: Velocity Magnitude
-    axes[1].plot(r_prime_fine, u0_plot, color='black', lw=2.0, label=r'$|\tilde{u}|$')
-    axes[1].set_ylabel("Normalized Velocity\nMagnitude", fontsize=11)
-    axes[1].set_ylim(-0.1, 1.1)
-    axes[1].grid(True, alpha=0.3, ls=':')
-    axes[1].legend(loc="upper right", frameon=True, fontsize=11)
+        # Panel 1: Surface Displacement
+        axes[0].plot(r_prime_fine, eta_plot, color='#1f77b4', lw=2.2, label=r'$\tilde{\eta}$')
+        axes[0].axhline(0, color='grey', lw=0.7, ls=':')
+        axes[0].set_ylabel("Normalized Surface\nDisplacement", fontsize=11)
+        axes[0].set_ylim(-1.1, 1.1)
+        axes[0].grid(True, alpha=0.3, ls=':')
+        axes[0].legend(loc="upper right", frameon=True, fontsize=11)
 
-    # Panel 3: Magnetic Field Magnitude
-    axes[2].plot(r_prime_fine, b_mag_plot, color='red', lw=2.0, label=r'$|\tilde{B}|$')
-    axes[2].set_ylabel("Normalized Magnetic\nField Magnitude", fontsize=11)
-    axes[2].set_ylim(-0.1, 1.1)
-    axes[2].grid(True, alpha=0.3, ls=':')
-    axes[2].legend(loc="upper right", frameon=True, fontsize=11)
+        # Panel 2: Velocity Magnitude
+        axes[1].plot(r_prime_fine, u0_plot, color='black', lw=2.0, label=r'$|\tilde{u}|$')
+        axes[1].set_ylabel("Normalized Velocity\nMagnitude", fontsize=11)
+        axes[1].set_ylim(-0.1, 1.1)
+        axes[1].grid(True, alpha=0.3, ls=':')
+        axes[1].legend(loc="upper right", frameon=True, fontsize=11)
 
-    # X-axis label on bottom panel
-    axes[2].set_xlim(0, 1)
-    axes[2].set_xlabel(r"$r'=(r-r_1)/\Delta r$", fontsize=12)
+        # Panel 3: Magnetic Field Magnitude
+        axes[2].plot(r_prime_fine, b_mag_plot, color='red', lw=2.0, label=r'$|\tilde{B}|$')
+        axes[2].set_ylabel("Normalized Magnetic\nField Magnitude", fontsize=11)
+        axes[2].set_ylim(-0.1, 1.1)
+        axes[2].grid(True, alpha=0.3, ls=':')
+        axes[2].legend(loc="upper right", frameon=True, fontsize=11)
+
+        # X-axis label on bottom panel
+        axes[2].set_xlim(0, 1)
+        axes[2].set_xlabel(r"$r'=(r-r_1)/\Delta r$", fontsize=12)
+    else:
+        # Create the 4-panel stacked plot (extended slow wave visualization)
+        fig, axes = plt.subplots(4, 1, figsize=(7, 11), sharex=True)
+        fig.subplots_adjust(hspace=0.08)
+        fig.suptitle(title_str, fontsize=14, y=0.94)
+
+        # Panel 1: Surface Displacement
+        axes[0].plot(r_prime_fine, eta_plot, color='#1f77b4', lw=2.2, label=r'$\tilde{\eta}$')
+        axes[0].axhline(0, color='grey', lw=0.7, ls=':')
+        axes[0].set_ylabel("Normalized Surface\nDisplacement", fontsize=11)
+        axes[0].set_ylim(-1.1, 1.1)
+        axes[0].grid(True, alpha=0.3, ls=':')
+        axes[0].legend(loc="upper right", frameon=True, fontsize=11)
+
+        # Panel 2: Velocity Magnitude
+        axes[1].plot(r_prime_fine, u0_plot, color='black', lw=2.0, label=r'$|\tilde{u}|$')
+        axes[1].set_ylabel("Normalized Velocity\nMagnitude", fontsize=11)
+        axes[1].set_ylim(-0.1, 1.1)
+        axes[1].grid(True, alpha=0.3, ls=':')
+        axes[1].legend(loc="upper right", frameon=True, fontsize=11)
+
+        # Panel 3: Magnetic Field Magnitude
+        axes[2].plot(r_prime_fine, b_mag_plot, color='red', lw=2.0, label=r'$|\tilde{B}|$')
+        axes[2].set_ylabel("Normalized Magnetic\nField Magnitude", fontsize=11)
+        axes[2].set_ylim(-0.1, 1.1)
+        axes[2].grid(True, alpha=0.3, ls=':')
+        axes[2].legend(loc="upper right", frameon=True, fontsize=11)
+
+        # Panel 4: Local Radial WKB Wavenumber k_r (Part VI)
+        kr_fine_sq = bary_interp(r_fine_hat, xg, mode.kr)
+        kr_fine = np.where(kr_fine_sq >= 0, np.sqrt(kr_fine_sq), np.nan)
+        axes[3].plot(r_prime_fine, kr_fine, color='darkorange', lw=2.2, label=r'$k_r$')
+        axes[3].axhline(0, color='grey', lw=0.7, ls=':')
+        axes[3].set_ylabel(r"Local Wavenumber $k_r$", fontsize=11)
+        axes[3].grid(True, alpha=0.3, ls=':')
+        axes[3].legend(loc="upper right", frameon=True, fontsize=11)
+
+        # X-axis label on bottom panel
+        axes[3].set_xlim(0, 1)
+        axes[3].set_xlabel(r"$r'=(r-r_1)/\Delta r$", fontsize=12)
 
     plt.savefig(filename, dpi=180, bbox_inches='tight')
     plt.close()
@@ -988,10 +1038,8 @@ print(f"Authoritative classification report saved to: {report_path}")
 if len(slow_modes_for_plotting) > 0:
     print(f"\nFound {len(slow_modes_for_plotting)} slow-wave modes. Generating complete visualizations...")
     for idx, mode in enumerate(slow_modes_for_plotting):
-        lbl = "Unclassified Slow Mode"
-        filename = f"outputs/unclassified_slow_mode_{idx+1}.png"
-
-        # Plot utilizing the same high-resolution plotting pipeline
+        # 1. Standalone Plot
+        filename = f"outputs/slow_mode_n{SLOW_MODE_N}.png"
         create_standalone_plot(
             mode=mode,
             filename=filename,
@@ -1002,20 +1050,50 @@ if len(slow_modes_for_plotting) > 0:
             inset_loc=(0.0, 0.08, 1.0, 1.0)
         )
 
-        # Plot complete 3-panel profile
-        complete_filename = f"outputs/unclassified_slow_complete_profile_{idx+1}.png"
+        # 2. Complete 4-panel profile
+        complete_filename = f"outputs/slow_mode_profile_n{SLOW_MODE_N}.png"
         create_complete_mode_profile(
             mode=mode,
             filename=complete_filename
         )
 
-        # Additional figure showing b_r(r) and b_theta(r) matching the publication style
-        bfield_filename = f"outputs/unclassified_slow_bfields_{idx+1}.png"
-
-        fig, ax = plt.subplots(figsize=(6.5, 5))
+        # 3. WKB kr plot
+        kr_filename = f"outputs/slow_mode_kr_n{SLOW_MODE_N}.png"
+        fig_kr, ax_kr = plt.subplots(figsize=(6.5, 5))
         r_prime = (xg - hat_r1) / (hat_r2 - hat_r1)
         r_prime_fine = np.linspace(0, 1, 200)
         r_fine_hat = r_prime_fine * (hat_r2 - hat_r1) + hat_r1
+
+        kr_fine_sq = bary_interp(r_fine_hat, xg, mode.kr)
+        kr_fine = np.where(kr_fine_sq >= 0, np.sqrt(kr_fine_sq), np.nan)
+
+        ax_kr.plot(r_prime_fine, kr_fine, color='darkorange', lw=2.2, label=r'$k_r(r)$')
+        ax_kr.axhline(0, color='grey', lw=0.8, ls=':')
+
+        # Shade evanescent zones
+        ax_kr.fill_between(r_prime_fine, 0, 1, where=(kr_fine_sq < 0), color='grey', alpha=0.15,
+                           transform=ax_kr.get_xaxis_transform(), label='Evanescent zone ($k_r^2 < 0$)')
+
+        ax_kr.set_xlim(0, 1)
+        ax_kr.set_xlabel(r"$r'=(r-r_1)/\Delta r$", fontsize=12)
+        ax_kr.set_ylabel(r"Local WKB Wavenumber $k_r$", fontsize=12)
+
+        sup = 'US-' if mode.frequency < 0 else 'US+'
+        sub = f'({mode.k},{mode.n})'
+        title_str_kr = rf"$k_r(r)$ profile for $\sigma_{{{sub}}}^{{{sup}}} = {mode.frequency:.4f}f_e$"
+        ax_kr.set_title(title_str_kr, fontsize=12)
+        ax_kr.grid(True, alpha=0.3, ls=':')
+        ax_kr.legend(loc="upper right", frameon=True, fontsize=11)
+
+        plt.tight_layout()
+        plt.savefig(kr_filename, dpi=180, bbox_inches='tight')
+        plt.close()
+        print(f"Saved: {kr_filename}")
+
+        # 4. Additional figure showing b_r(r) and b_theta(r) matching the publication style
+        bfield_filename = f"outputs/slow_mode_bfields_n{SLOW_MODE_N}.png"
+
+        fig, ax = plt.subplots(figsize=(6.5, 5))
 
         # Compute absolute magnitudes of reconstructed complex magnetic fields
         br_mag = np.abs(mode.br)
@@ -1041,7 +1119,7 @@ if len(slow_modes_for_plotting) > 0:
         ax.set_xlim(0, 1)
         ax.set_xlabel(r"$r'=(r-r_1)/\Delta r$", fontsize=12)
         ax.set_ylabel("Normalized Magnetic Perturbation Magnitude", fontsize=12)
-        ax.set_title(rf"$\sigma_{{({mode.k},{mode.n})}}^{{US+}} = {mode.frequency:.4f}f_e$ (Magnetic Profiles)", fontsize=12)
+        ax.set_title(rf"$\sigma_{{{sub}}}^{{{sup}}} = {mode.frequency:.4f}f_e$ (Magnetic Profiles)", fontsize=12)
         ax.legend(loc="upper right", frameon=True, fontsize=11)
 
         plt.tight_layout()
