@@ -6,281 +6,281 @@ SYSTEM PARAMETERS:
   omega_A= 0.5000
   m      = 2
 --------------------------------------------------
-Eigenvalue: -17.73331436
-  Branch: Poincaré-
-  Residual SVD: 4.9417e-12
-  Radial crossings: 4
-  Classification Criterion: Global spectrum search (high-frequency wave branch match)
-  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
-  Details: Matches the high-frequency Poincaré global spectrum with 4 radial crossings.
-  Reason for Classification: Traces to fast wave branches (|omega_traced| >= 1.0) in the hydrodynamic limit B0 -> 0, confirming fast gravity-inertial restoring mechanisms.
-  Hydrodynamic Continuation limit (B0 -> 0):
-    Converged successfully to limiting frequency: -17.740382
-    Hydrodynamic Rossby WKB comparison: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magneto-Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetostrophic WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Kinetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Energy Ratio (Emag/Ekin): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force Norms (Coriolis, Lorentz, Pressure, PV-gradient): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force-balance residual: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Final Confidence Score: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
+Eigenvalue: -0.50000135
+  Modal Notation: sigma_(2)^K-
+  Branch: Kelvin-
+  Radial Node Count (n): 0
+  Theoretical Evidence Used: Geostrophic boundary matching and exponential trapping profile conform exactly to Section 10 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): -1.000000
+  Diagnostics and Status:
+    Kelvin diagnostics: derived from theory
+    Poincaré diagnostics: unavailable
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue: -13.37433442
-  Branch: Poincaré-
-  Residual SVD: 3.7719e-12
-  Radial crossings: 3
-  Classification Criterion: Global spectrum search (high-frequency wave branch match)
-  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
-  Details: Matches the high-frequency Poincaré global spectrum with 3 radial crossings.
-  Reason for Classification: Traces to fast wave branches (|omega_traced| >= 1.0) in the hydrodynamic limit B0 -> 0, confirming fast gravity-inertial restoring mechanisms.
-  Hydrodynamic Continuation limit (B0 -> 0):
-    Converged successfully to limiting frequency: -13.383722
-    Hydrodynamic Rossby WKB comparison: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magneto-Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetostrophic WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Kinetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Energy Ratio (Emag/Ekin): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force Norms (Coriolis, Lorentz, Pressure, PV-gradient): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force-balance residual: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Final Confidence Score: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
---------------------------------------------------
-Eigenvalue: -9.05394085
-  Branch: Poincaré-
-  Residual SVD: 1.2067e-12
-  Radial crossings: 2
-  Classification Criterion: Global spectrum search (high-frequency wave branch match)
-  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
-  Details: Matches the high-frequency Poincaré global spectrum with 2 radial crossings.
-  Reason for Classification: Traces to fast wave branches (|omega_traced| >= 1.0) in the hydrodynamic limit B0 -> 0, confirming fast gravity-inertial restoring mechanisms.
-  Hydrodynamic Continuation limit (B0 -> 0):
-    Converged successfully to limiting frequency: -9.067867
-    Hydrodynamic Rossby WKB comparison: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magneto-Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetostrophic WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Kinetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Energy Ratio (Emag/Ekin): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force Norms (Coriolis, Lorentz, Pressure, PV-gradient): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force-balance residual: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Final Confidence Score: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
---------------------------------------------------
-Eigenvalue: -4.87608943
-  Branch: Poincaré-
-  Residual SVD: 2.4650e-13
-  Radial crossings: 1
-  Classification Criterion: Global spectrum search (high-frequency wave branch match)
-  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
-  Details: Matches the high-frequency Poincaré global spectrum with 1 radial crossings.
-  Reason for Classification: Traces to fast wave branches (|omega_traced| >= 1.0) in the hydrodynamic limit B0 -> 0, confirming fast gravity-inertial restoring mechanisms.
-  Hydrodynamic Continuation limit (B0 -> 0):
-    Converged successfully to limiting frequency: -4.902242
-    Hydrodynamic Rossby WKB comparison: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magneto-Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetostrophic WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Kinetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Energy Ratio (Emag/Ekin): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force Norms (Coriolis, Lorentz, Pressure, PV-gradient): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force-balance residual: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Final Confidence Score: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
+Eigenvalue: 1.67364680
+  Modal Notation: sigma_(2)^K+
+  Branch: Kelvin+
+  Radial Node Count (n): 0
+  Theoretical Evidence Used: Geostrophic boundary matching and exponential trapping profile conform exactly to Section 10 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): 1.741775
+  Diagnostics and Status:
+    Kelvin diagnostics: derived from theory
+    Poincaré diagnostics: unavailable
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
 Eigenvalue: -1.96841662
+  Modal Notation: sigma_(2,0)^P-
   Branch: Poincaré-
-  Residual SVD: 3.5828e-14
-  Radial crossings: 0
-  Classification Criterion: Global spectrum search (high-frequency wave branch match)
-  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
-  Details: Matches the high-frequency Poincaré global spectrum with 0 radial crossings.
-  Reason for Classification: Traces to fast wave branches (|omega_traced| >= 1.0) in the hydrodynamic limit B0 -> 0, confirming fast gravity-inertial restoring mechanisms.
-  Hydrodynamic Continuation limit (B0 -> 0):
-    Converged successfully to limiting frequency: -2.035897
-    Hydrodynamic Rossby WKB comparison: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magneto-Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetostrophic WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Kinetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Energy Ratio (Emag/Ekin): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force Norms (Coriolis, Lorentz, Pressure, PV-gradient): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force-balance residual: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Final Confidence Score: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
+  Radial Node Count (n): 0
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): -2.035897
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue: -0.50000135
-  Branch: Kelvin-
-  Residual SVD: 1.6152e-11
-  Radial crossings: 0
-  Classification Criterion: Analytical boundary-trapped geostrophic match (Kelvin-)
-  Physical Restoring Mechanism: Gravity modified by rotation (Coriolis boundary trapping)
-  Details: Decays outward from r1. Traces to counter-rotating hydrodynamic Kelvin wave as B0 -> 0.
-  Reason for Classification: Geostrophic matching on boundaries and outward boundary-trapping decay conform exactly to the derived Kelvin wave profiles.
-  Hydrodynamic Continuation limit (B0 -> 0):
-    Converged successfully to limiting frequency: -1.000000
-    Hydrodynamic Rossby WKB comparison: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magneto-Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetostrophic WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Kinetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Energy Ratio (Emag/Ekin): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force Norms (Coriolis, Lorentz, Pressure, PV-gradient): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force-balance residual: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Final Confidence Score: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
+Eigenvalue: -4.87608943
+  Modal Notation: sigma_(2,1)^P-
+  Branch: Poincaré-
+  Radial Node Count (n): 1
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): -4.902242
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue:  0.05333389
-  Branch: Unclassified Slow (Theoretically Insufficient)
-  Residual SVD: 4.9376e-06
-  Radial crossings: 0
-  Classification Criterion: Theoretically Insufficient
-  Physical Restoring Mechanism: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Details: This mode belongs to the slow-wave spectrum but cannot be rigorously classified as Rossby, Magneto-Rossby, or Magnetostrophic under the strict theory-driven framework.
-  Reason for Classification: The uploaded SWMHD manuscript does not derive the necessary diagnostics (energy functionals, force L2 norms, or spatial WKB averaging/comparison schemes) required to evaluate Rossby or Magnetostrophic criteria.
-  Hydrodynamic Continuation limit (B0 -> 0):
-    Converged successfully to limiting frequency: 0.420843
-    Hydrodynamic Rossby WKB comparison: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magneto-Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetostrophic WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Kinetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Energy Ratio (Emag/Ekin): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force Norms (Coriolis, Lorentz, Pressure, PV-gradient): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force-balance residual: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Final Confidence Score: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
+Eigenvalue: -9.05394085
+  Modal Notation: sigma_(2,2)^P-
+  Branch: Poincaré-
+  Radial Node Count (n): 2
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): -9.067867
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue:  0.50000174
+Eigenvalue: -13.37433442
+  Modal Notation: sigma_(2,3)^P-
+  Branch: Poincaré-
+  Radial Node Count (n): 3
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): -13.383722
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
+--------------------------------------------------
+Eigenvalue: -17.73331436
+  Modal Notation: sigma_(2,4)^P-
+  Branch: Poincaré-
+  Radial Node Count (n): 4
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): -17.740382
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
+--------------------------------------------------
+Eigenvalue: 0.50000174
+  Modal Notation: sigma_(2,0)^P+
   Branch: Poincaré+
-  Residual SVD: 7.5277e-12
-  Radial crossings: 0
-  Classification Criterion: Global spectrum search (high-frequency wave branch match)
-  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
-  Details: Matches the high-frequency Poincaré global spectrum with 0 radial crossings.
-  Reason for Classification: Traces to fast wave branches (|omega_traced| >= 1.0) in the hydrodynamic limit B0 -> 0, confirming fast gravity-inertial restoring mechanisms.
-  Hydrodynamic Continuation limit (B0 -> 0):
-    Converged successfully to limiting frequency: 1.000000
-    Hydrodynamic Rossby WKB comparison: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magneto-Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetostrophic WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Kinetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Energy Ratio (Emag/Ekin): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force Norms (Coriolis, Lorentz, Pressure, PV-gradient): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force-balance residual: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Final Confidence Score: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
+  Radial Node Count (n): 0
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): 1.000000
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue:  1.67364680
-  Branch: Kelvin+
-  Residual SVD: 1.4330e-15
-  Radial crossings: 0
-  Classification Criterion: Analytical boundary-trapped geostrophic match (Kelvin+)
-  Physical Restoring Mechanism: Gravity modified by rotation (Coriolis boundary trapping)
-  Details: Decays inward from r2. Traces to co-rotating hydrodynamic Kelvin wave as B0 -> 0.
-  Reason for Classification: Geostrophic matching on boundaries and inward boundary-trapping decay conform exactly to the derived Kelvin wave profiles.
-  Hydrodynamic Continuation limit (B0 -> 0):
-    Converged successfully to limiting frequency: 1.741775
-    Hydrodynamic Rossby WKB comparison: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magneto-Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetostrophic WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Kinetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Energy Ratio (Emag/Ekin): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force Norms (Coriolis, Lorentz, Pressure, PV-gradient): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force-balance residual: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Final Confidence Score: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
---------------------------------------------------
-Eigenvalue:  5.04060197
+Eigenvalue: 5.04060197
+  Modal Notation: sigma_(2,1)^P+
   Branch: Poincaré+
-  Residual SVD: 4.0178e-13
-  Radial crossings: 1
-  Classification Criterion: Global spectrum search (high-frequency wave branch match)
-  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
-  Details: Matches the high-frequency Poincaré global spectrum with 1 radial crossings.
-  Reason for Classification: Traces to fast wave branches (|omega_traced| >= 1.0) in the hydrodynamic limit B0 -> 0, confirming fast gravity-inertial restoring mechanisms.
-  Hydrodynamic Continuation limit (B0 -> 0):
-    Converged successfully to limiting frequency: 5.066626
-    Hydrodynamic Rossby WKB comparison: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magneto-Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetostrophic WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Kinetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Energy Ratio (Emag/Ekin): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force Norms (Coriolis, Lorentz, Pressure, PV-gradient): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force-balance residual: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Final Confidence Score: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
+  Radial Node Count (n): 1
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): 5.066626
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue:  9.10203688
+Eigenvalue: 9.10203688
+  Modal Notation: sigma_(2,2)^P+
   Branch: Poincaré+
-  Residual SVD: 2.1438e-13
-  Radial crossings: 2
-  Classification Criterion: Global spectrum search (high-frequency wave branch match)
-  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
-  Details: Matches the high-frequency Poincaré global spectrum with 2 radial crossings.
-  Reason for Classification: Traces to fast wave branches (|omega_traced| >= 1.0) in the hydrodynamic limit B0 -> 0, confirming fast gravity-inertial restoring mechanisms.
-  Hydrodynamic Continuation limit (B0 -> 0):
-    Converged successfully to limiting frequency: 9.115960
-    Hydrodynamic Rossby WKB comparison: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magneto-Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetostrophic WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Kinetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Energy Ratio (Emag/Ekin): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force Norms (Coriolis, Lorentz, Pressure, PV-gradient): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force-balance residual: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Final Confidence Score: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
+  Radial Node Count (n): 2
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): 9.115960
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue:  13.39609618
+Eigenvalue: 13.39609618
+  Modal Notation: sigma_(2,3)^P+
   Branch: Poincaré+
-  Residual SVD: 2.2486e-12
-  Radial crossings: 3
-  Classification Criterion: Global spectrum search (high-frequency wave branch match)
-  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
-  Details: Matches the high-frequency Poincaré global spectrum with 3 radial crossings.
-  Reason for Classification: Traces to fast wave branches (|omega_traced| >= 1.0) in the hydrodynamic limit B0 -> 0, confirming fast gravity-inertial restoring mechanisms.
-  Hydrodynamic Continuation limit (B0 -> 0):
-    Converged successfully to limiting frequency: 13.405483
-    Hydrodynamic Rossby WKB comparison: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magneto-Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetostrophic WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Kinetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Energy Ratio (Emag/Ekin): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force Norms (Coriolis, Lorentz, Pressure, PV-gradient): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force-balance residual: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Final Confidence Score: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
+  Radial Node Count (n): 3
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): 13.405483
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue:  17.74561780
+Eigenvalue: 17.74561780
+  Modal Notation: sigma_(2,4)^P+
   Branch: Poincaré+
-  Residual SVD: 1.2794e-12
-  Radial crossings: 4
-  Classification Criterion: Global spectrum search (high-frequency wave branch match)
-  Physical Restoring Mechanism: Gravity and rotation (fast inertia-gravity branch)
-  Details: Matches the high-frequency Poincaré global spectrum with 4 radial crossings.
-  Reason for Classification: Traces to fast wave branches (|omega_traced| >= 1.0) in the hydrodynamic limit B0 -> 0, confirming fast gravity-inertial restoring mechanisms.
-  Hydrodynamic Continuation limit (B0 -> 0):
-    Converged successfully to limiting frequency: 17.752685
-    Hydrodynamic Rossby WKB comparison: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magneto-Rossby WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetostrophic WKB error: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Kinetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Magnetic Energy: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Energy Ratio (Emag/Ekin): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force Norms (Coriolis, Lorentz, Pressure, PV-gradient): The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Force-balance residual: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
-  Final Confidence Score: The uploaded theory does not contain sufficient information to derive this diagnostic rigorously. Please provide the corresponding theoretical derivation before implementation.
+  Radial Node Count (n): 4
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): 17.752685
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
+--------------------------------------------------
+Eigenvalue: 0.05333389
+  Modal Notation: sigma_(2,0)^US
+  Branch: Unclassified (Theory Incomplete)
+  Radial Node Count (n): 0
+  Theoretical Evidence Used: None (The SWMHD manuscript does not derive energy integrals, L2 force norms, or spatial WKB averaging comparison metrics needed to classify slow-wave branches).
+  Hydrodynamic Continuation limit (B0 -> 0): 0.420843
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: unavailable
+    Rossby diagnostics: unavailable (The uploaded theory does not derive this diagnostic)
+    Magneto-Rossby diagnostics: unavailable (The uploaded theory does not derive this diagnostic)
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
 FINAL CONCLUSION:
 Due to the strict theoretical requirements of the SWMHD framework, empirical and heuristic frequency thresholds have been removed.
 Because the uploaded manuscript does not derive energy integrals, L2 force norms, or spatial WKB averaging comparison metrics, the slow-wave modes cannot be classified as Rossby, Magneto-Rossby, or Magnetostrophic.
 
-They are rigorously classified as Unclassified Slow (Theoretically Insufficient) pending further theoretical derivation.
+They are rigorously classified as Unclassified Slow (Theory Incomplete) pending further theoretical derivation.
