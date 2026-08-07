@@ -32,14 +32,14 @@ Omega = 0.5e-4       # rad/s
 H0 = 500.0           # m
 g = 9.81             # m/s^2
 rho0 = 1000.0        # kg/m^3
-C = 1.882e9          # m^3/s^2
-B0 = 8.8623e-4       # T
+C = 1e10             # m^3/s^2
+B0 = 0.0             # T
 
 r1 = 0.5e6           # inner radius [m]
 r2 = 1.0e6           # outer radius [m]
 N = 32               # grid resolution
 m = 2                # azimuthal mode number
-SLOW_MODE_N = 0      # radial mode number to visualize for slow waves
+SLOW_MODE_N = 1      # radial mode number to visualize for slow waves
 
 # Global scan range boundaries
 OMEGA_SCAN_MIN = -20.0
@@ -426,10 +426,13 @@ def classify_mode_by_theory(mode):
     1. Determines Kelvin based on Section 10 boundary trapping peak and continuation limit.
     2. Determines Poincaré based on Section 9.1 gravity-inertial limit.
     """
-    # Trace to B0 -> 0 (approx 1e-12 T)
-    omega0 = trace_eigenfrequency(mode.frequency, B0, 1e-12, mode.k)
-    if omega0 is None:
-        omega0 = mode.frequency # Fallback if continuation fails
+    # Trace to B0 -> 0. If B0 is already 0, continuation limit is the frequency itself.
+    if abs(B0) < 1e-10:
+        omega0 = mode.frequency
+    else:
+        omega0 = trace_eigenfrequency(mode.frequency, B0, 0.0, mode.k)
+        if omega0 is None:
+            omega0 = mode.frequency # Fallback if continuation fails
 
     mode.continuation = omega0
 

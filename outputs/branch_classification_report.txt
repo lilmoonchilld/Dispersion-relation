@@ -1,12 +1,12 @@
 SWMHD BRANCH CLASSIFICATION REPORT
 ==================================================
 SYSTEM PARAMETERS:
-  B0     = 8.862300e-04 T
-  gamma  = 3.5688
-  omega_A= 0.5000
+  B0     = 0.000000e+00 T
+  gamma  = 18.9630
+  omega_A= 0.0000
   m      = 2
 --------------------------------------------------
-Eigenvalue: -0.50000135
+Eigenvalue: -1.00000000
   Modal Notation: sigma_(2)^K-
   Branch: Kelvin-
   Radial Node Count (n): 0
@@ -27,12 +27,12 @@ Eigenvalue: -0.50000135
     Force balance: The uploaded theory does not derive this diagnostic.
     Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue: 1.67364680
+Eigenvalue: 1.73274104
   Modal Notation: sigma_(2)^K+
   Branch: Kelvin+
   Radial Node Count (n): 0
   Theoretical Evidence Used: Geostrophic boundary matching and exponential trapping profile conform exactly to Section 10 of SWMHD theory.
-  Hydrodynamic Continuation limit (B0 -> 0): 1.741775
+  Hydrodynamic Continuation limit (B0 -> 0): 1.732741
   Diagnostics and Status:
     Kelvin diagnostics: derived from theory
     Poincaré diagnostics: unavailable
@@ -48,12 +48,12 @@ Eigenvalue: 1.67364680
     Force balance: The uploaded theory does not derive this diagnostic.
     Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue: -1.96841662
+Eigenvalue: -2.04349843
   Modal Notation: sigma_(2,0)^P-
   Branch: Poincaré-
   Radial Node Count (n): 0
   Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
-  Hydrodynamic Continuation limit (B0 -> 0): -2.035897
+  Hydrodynamic Continuation limit (B0 -> 0): -2.043498
   Diagnostics and Status:
     Kelvin diagnostics: unavailable
     Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
@@ -69,12 +69,12 @@ Eigenvalue: -1.96841662
     Force balance: The uploaded theory does not derive this diagnostic.
     Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue: -4.87608943
+Eigenvalue: -4.71265139
   Modal Notation: sigma_(2,1)^P-
   Branch: Poincaré-
   Radial Node Count (n): 1
   Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
-  Hydrodynamic Continuation limit (B0 -> 0): -4.902242
+  Hydrodynamic Continuation limit (B0 -> 0): -4.712651
   Diagnostics and Status:
     Kelvin diagnostics: unavailable
     Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
@@ -90,12 +90,12 @@ Eigenvalue: -4.87608943
     Force balance: The uploaded theory does not derive this diagnostic.
     Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue: -9.05394085
+Eigenvalue: -8.96983066
   Modal Notation: sigma_(2,2)^P-
   Branch: Poincaré-
   Radial Node Count (n): 2
   Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
-  Hydrodynamic Continuation limit (B0 -> 0): -9.067867
+  Hydrodynamic Continuation limit (B0 -> 0): -8.969831
   Diagnostics and Status:
     Kelvin diagnostics: unavailable
     Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
@@ -111,12 +111,12 @@ Eigenvalue: -9.05394085
     Force balance: The uploaded theory does not derive this diagnostic.
     Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue: -13.37433442
+Eigenvalue: -13.31813821
   Modal Notation: sigma_(2,3)^P-
   Branch: Poincaré-
   Radial Node Count (n): 3
   Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
-  Hydrodynamic Continuation limit (B0 -> 0): -13.383722
+  Hydrodynamic Continuation limit (B0 -> 0): -13.318138
   Diagnostics and Status:
     Kelvin diagnostics: unavailable
     Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
@@ -132,12 +132,12 @@ Eigenvalue: -13.37433442
     Force balance: The uploaded theory does not derive this diagnostic.
     Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue: -17.73331436
+Eigenvalue: -17.69109239
   Modal Notation: sigma_(2,4)^P-
   Branch: Poincaré-
   Radial Node Count (n): 4
   Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
-  Hydrodynamic Continuation limit (B0 -> 0): -17.740382
+  Hydrodynamic Continuation limit (B0 -> 0): -17.691092
   Diagnostics and Status:
     Kelvin diagnostics: unavailable
     Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
@@ -153,7 +153,7 @@ Eigenvalue: -17.73331436
     Force balance: The uploaded theory does not derive this diagnostic.
     Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue: 0.50000174
+Eigenvalue: 1.00000000
   Modal Notation: sigma_(2,0)^P+
   Branch: Poincaré+
   Radial Node Count (n): 0
@@ -174,12 +174,12 @@ Eigenvalue: 0.50000174
     Force balance: The uploaded theory does not derive this diagnostic.
     Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue: 5.04060197
+Eigenvalue: 4.88837732
   Modal Notation: sigma_(2,1)^P+
   Branch: Poincaré+
   Radial Node Count (n): 1
   Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
-  Hydrodynamic Continuation limit (B0 -> 0): 5.066626
+  Hydrodynamic Continuation limit (B0 -> 0): 4.888377
   Diagnostics and Status:
     Kelvin diagnostics: unavailable
     Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
@@ -195,12 +195,12 @@ Eigenvalue: 5.04060197
     Force balance: The uploaded theory does not derive this diagnostic.
     Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue: 9.10203688
+Eigenvalue: 9.01584471
   Modal Notation: sigma_(2,2)^P+
   Branch: Poincaré+
   Radial Node Count (n): 2
   Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
-  Hydrodynamic Continuation limit (B0 -> 0): 9.115960
+  Hydrodynamic Continuation limit (B0 -> 0): 9.015845
   Diagnostics and Status:
     Kelvin diagnostics: unavailable
     Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
@@ -216,12 +216,12 @@ Eigenvalue: 9.10203688
     Force balance: The uploaded theory does not derive this diagnostic.
     Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue: 13.39609618
+Eigenvalue: 13.33850597
   Modal Notation: sigma_(2,3)^P+
   Branch: Poincaré+
   Radial Node Count (n): 3
   Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
-  Hydrodynamic Continuation limit (B0 -> 0): 13.405483
+  Hydrodynamic Continuation limit (B0 -> 0): 13.338506
   Diagnostics and Status:
     Kelvin diagnostics: unavailable
     Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
@@ -237,12 +237,12 @@ Eigenvalue: 13.39609618
     Force balance: The uploaded theory does not derive this diagnostic.
     Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue: 17.74561780
+Eigenvalue: 17.70252199
   Modal Notation: sigma_(2,4)^P+
   Branch: Poincaré+
   Radial Node Count (n): 4
   Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
-  Hydrodynamic Continuation limit (B0 -> 0): 17.752685
+  Hydrodynamic Continuation limit (B0 -> 0): 17.702522
   Diagnostics and Status:
     Kelvin diagnostics: unavailable
     Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
@@ -258,12 +258,33 @@ Eigenvalue: 17.74561780
     Force balance: The uploaded theory does not derive this diagnostic.
     Energy ratio: The uploaded theory does not derive this diagnostic.
 --------------------------------------------------
-Eigenvalue: 0.05333389
-  Modal Notation: sigma_(2,0)^US
+Eigenvalue: -0.02678095
+  Modal Notation: sigma_(2,1)^US
   Branch: Unclassified (Theory Incomplete)
-  Radial Node Count (n): 0
+  Radial Node Count (n): 1
   Theoretical Evidence Used: None (The SWMHD manuscript does not derive energy integrals, L2 force norms, or spatial WKB averaging comparison metrics needed to classify slow-wave branches).
-  Hydrodynamic Continuation limit (B0 -> 0): 0.420843
+  Hydrodynamic Continuation limit (B0 -> 0): -0.026781
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: unavailable
+    Rossby diagnostics: unavailable (The uploaded theory does not derive this diagnostic)
+    Magneto-Rossby diagnostics: unavailable (The uploaded theory does not derive this diagnostic)
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
+--------------------------------------------------
+Eigenvalue: 0.03761783
+  Modal Notation: sigma_(2,1)^US
+  Branch: Unclassified (Theory Incomplete)
+  Radial Node Count (n): 1
+  Theoretical Evidence Used: None (The SWMHD manuscript does not derive energy integrals, L2 force norms, or spatial WKB averaging comparison metrics needed to classify slow-wave branches).
+  Hydrodynamic Continuation limit (B0 -> 0): 0.037618
   Diagnostics and Status:
     Kelvin diagnostics: unavailable
     Poincaré diagnostics: unavailable
