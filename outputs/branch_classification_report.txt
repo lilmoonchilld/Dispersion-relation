@@ -1,0 +1,286 @@
+SWMHD BRANCH CLASSIFICATION REPORT
+==================================================
+SYSTEM PARAMETERS:
+  B0     = 8.862300e-04 T
+  gamma  = 3.5688
+  omega_A= 0.5000
+  m      = 2
+--------------------------------------------------
+Eigenvalue: -0.50000135
+  Modal Notation: sigma_(2)^K-
+  Branch: Kelvin-
+  Radial Node Count (n): 0
+  Theoretical Evidence Used: Geostrophic boundary matching and exponential trapping profile conform exactly to Section 10 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): -1.000000
+  Diagnostics and Status:
+    Kelvin diagnostics: derived from theory
+    Poincaré diagnostics: unavailable
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
+--------------------------------------------------
+Eigenvalue: 1.67364680
+  Modal Notation: sigma_(2)^K+
+  Branch: Kelvin+
+  Radial Node Count (n): 0
+  Theoretical Evidence Used: Geostrophic boundary matching and exponential trapping profile conform exactly to Section 10 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): 1.741775
+  Diagnostics and Status:
+    Kelvin diagnostics: derived from theory
+    Poincaré diagnostics: unavailable
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
+--------------------------------------------------
+Eigenvalue: -1.96841662
+  Modal Notation: sigma_(2,0)^P-
+  Branch: Poincaré-
+  Radial Node Count (n): 0
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): -2.035897
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
+--------------------------------------------------
+Eigenvalue: -4.87608943
+  Modal Notation: sigma_(2,1)^P-
+  Branch: Poincaré-
+  Radial Node Count (n): 1
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): -4.902242
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
+--------------------------------------------------
+Eigenvalue: -9.05394085
+  Modal Notation: sigma_(2,2)^P-
+  Branch: Poincaré-
+  Radial Node Count (n): 2
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): -9.067867
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
+--------------------------------------------------
+Eigenvalue: -13.37433442
+  Modal Notation: sigma_(2,3)^P-
+  Branch: Poincaré-
+  Radial Node Count (n): 3
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): -13.383722
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
+--------------------------------------------------
+Eigenvalue: -17.73331436
+  Modal Notation: sigma_(2,4)^P-
+  Branch: Poincaré-
+  Radial Node Count (n): 4
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): -17.740382
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
+--------------------------------------------------
+Eigenvalue: 0.50000174
+  Modal Notation: sigma_(2,0)^P+
+  Branch: Poincaré+
+  Radial Node Count (n): 0
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): 1.000000
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
+--------------------------------------------------
+Eigenvalue: 5.04060197
+  Modal Notation: sigma_(2,1)^P+
+  Branch: Poincaré+
+  Radial Node Count (n): 1
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): 5.066626
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
+--------------------------------------------------
+Eigenvalue: 9.10203688
+  Modal Notation: sigma_(2,2)^P+
+  Branch: Poincaré+
+  Radial Node Count (n): 2
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): 9.115960
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
+--------------------------------------------------
+Eigenvalue: 13.39609618
+  Modal Notation: sigma_(2,3)^P+
+  Branch: Poincaré+
+  Radial Node Count (n): 3
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): 13.405483
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
+--------------------------------------------------
+Eigenvalue: 17.74561780
+  Modal Notation: sigma_(2,4)^P+
+  Branch: Poincaré+
+  Radial Node Count (n): 4
+  Theoretical Evidence Used: Limiting frequency as B0 -> 0 satisfies omega_0^2 >= 1.0, matching the fast inertia-gravity branch analytically proven in Section 9.1 of SWMHD theory.
+  Hydrodynamic Continuation limit (B0 -> 0): 17.752685
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: computed numerically (Section 9.1 dispersion relation limit)
+    Rossby diagnostics: unavailable
+    Magneto-Rossby diagnostics: unavailable
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
+--------------------------------------------------
+Eigenvalue: 0.05333389
+  Modal Notation: sigma_(2,0)^US
+  Branch: Unclassified (Theory Incomplete)
+  Radial Node Count (n): 0
+  Theoretical Evidence Used: None (The SWMHD manuscript does not derive energy integrals, L2 force norms, or spatial WKB averaging comparison metrics needed to classify slow-wave branches).
+  Hydrodynamic Continuation limit (B0 -> 0): 0.420843
+  Diagnostics and Status:
+    Kelvin diagnostics: unavailable
+    Poincaré diagnostics: unavailable
+    Rossby diagnostics: unavailable (The uploaded theory does not derive this diagnostic)
+    Magneto-Rossby diagnostics: unavailable (The uploaded theory does not derive this diagnostic)
+  Unsupported Diagnostics (The uploaded theory does not derive these):
+    Hydrodynamic Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Magneto-Rossby frequency: The uploaded theory does not derive this diagnostic.
+    Local WKB comparison: The uploaded theory does not derive this diagnostic.
+    Radial averaged WKB comparison: The uploaded theory does not derive this diagnostic.
+    Dispersion residual: The uploaded theory does not derive this diagnostic.
+    Phase error: The uploaded theory does not derive this diagnostic.
+    Force balance: The uploaded theory does not derive this diagnostic.
+    Energy ratio: The uploaded theory does not derive this diagnostic.
+--------------------------------------------------
+FINAL CONCLUSION:
+Due to the strict theoretical requirements of the SWMHD framework, empirical and heuristic frequency thresholds have been removed.
+Because the uploaded manuscript does not derive energy integrals, L2 force norms, or spatial WKB averaging comparison metrics, the slow-wave modes cannot be classified as Rossby, Magneto-Rossby, or Magnetostrophic.
+
+They are rigorously classified as Unclassified Slow (Theory Incomplete) pending further theoretical derivation.
