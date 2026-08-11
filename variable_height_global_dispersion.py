@@ -142,7 +142,7 @@ def radial_coefficients(omega, m, r_grid):
 
     term1_C0 = Heqp / ws2_minus_f2
     term2_C0 = 2.0 * Heq * ws * wsp / (ws2_minus_f2**2)
-    C0 = omega + (m * g * f / r_grid) * (term1_C0 - term2_C0) - (m**2 * g * Heq * ws) / (r_grid**2 * ws2_minus_f2)
+    C0 = omega - (m * g * f / r_grid) * (term1_C0 - term2_C0) - (m**2 * g * Heq * ws) / (r_grid**2 * ws2_minus_f2)
 
     return C2, C1, C0
 
@@ -170,7 +170,7 @@ def build_matrix(omega, m, N, r_grid, D1_mat, D2_mat):
     for idx in [0, N - 1]:
         rb = r_grid[idx]
         ws_b = omega_star(omega, rb)
-        L[idx, :] = ws_b * D1_mat[idx, :] + (m * f / rb) * np.eye(N)[idx]
+        L[idx, :] = ws_b * D1_mat[idx, :] - (m * f / rb) * np.eye(N)[idx]
 
     return L
 
@@ -291,11 +291,11 @@ def run_validation_checks():
         eta = get_eigenfunction(w_test, 1, N_sample, r_grid, D1_mat, D2_mat)
 
         # Test D: Boundary condition residual
-        # BC: ws * D1 * eta + (m * f / rb) * eta = 0
+        # BC: ws * D1 * eta - (m * f / rb) * eta = 0
         for b_name, b_idx in [("inner", 0), ("outer", -1)]:
             rb = r_grid[b_idx]
             ws_b = omega_star(w_test, rb)
-            val = ws_b * (D1_mat[b_idx, :] @ eta) + (1.0 * f / rb) * eta[b_idx]
+            val = ws_b * (D1_mat[b_idx, :] @ eta) - (1.0 * f / rb) * eta[b_idx]
             print(f"Test D [Boundary Condition at {b_name}]: Robin BC residual = {np.abs(val):.6e}")
 
         # Test E: ODE residual
