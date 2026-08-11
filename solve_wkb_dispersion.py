@@ -19,26 +19,26 @@ plt.rcParams.update({
     'ytick.major.width': 1.2,
 })
 
-# Input parameters
+# Input parameters (as updated by user)
 Omega = 0.5e-4       # Rotation rate [rad/s]
 H0    = 500.0        # Reference depth [m]
 g     = 9.81         # Gravitational acceleration [m/s^2]
-B0    = 5e-4         # External vertical magnetic field [T]
+B0    = 5e-5         # External vertical magnetic field [T]
 rho0  = 1000.0       # Density [kg/m^3]
-C     = 0.0          # Radial gravity constant [m^3/s^2]
+C     = 1e13         # Radial gravity constant [m^3/s^2]
 
 r1    = 0.5e6        # Inner radius [m]
 r2    = 1.0e6        # Outer radius [m]
 r0    = 0.5 * (r1 + r2)
 
 f     = 2.0 * Omega   # Coriolis parameter [rad/s]
-n     = 2
+n     = 0
 
 mu0   = 4.0 * np.pi * 1e-7
 ROOT_TOL = 1e-10
 
-M_MIN = -20
-M_MAX = 20
+M_MIN = 0
+M_MAX = 30
 m_values = np.arange(M_MIN, M_MAX + 1)
 
 OUTPUT_DIR = "outputs"
@@ -79,9 +79,7 @@ def polynomial_coefficients(m, r, kappa_sq):
         - kappa_sq * g * H
     )
 
-    A5 = (
-        m * f * Q_r / r
-    )
+    A5 = -m * f * Q_r / r
 
     A4 = (
         6.0 * wA2**2
@@ -90,7 +88,7 @@ def polynomial_coefficients(m, r, kappa_sq):
         - kappa_sq * g * H * (3.0 * wA2 - f**2)
     )
 
-    A3 = (
+    A3 = -(
         m * f * Q_r / r
         * (6.0 * wA2 - f**2)
     )
@@ -101,7 +99,7 @@ def polynomial_coefficients(m, r, kappa_sq):
         - kappa_sq * g * H * (3.0 * wA2**2 - f**2 * wA2)
     )
 
-    A1 = (
+    A1 = -(
         5.0 * m * f * Q_r * wA2**2 / r
     )
 
@@ -122,6 +120,8 @@ def dimensionless_coefficients(m, r, kappa_sq):
 
 def solve_roots(m, r, kappa_sq):
     hat_A = dimensionless_coefficients(m, r, kappa_sq)
+    if not np.all(np.isfinite(hat_A)):
+        return np.array([np.nan]*8, dtype=complex)
     hat_omega_roots = np.roots(hat_A)
     omega_roots = hat_omega_roots * (2.0 * Omega)
     return omega_roots
@@ -131,6 +131,8 @@ def check_consistency(m, r, omega):
     Evaluates original WKB dispersion relation kappa^2 - (W1 + W2 + W3) at computed root omega.
     Returns residual.
     """
+    if np.isnan(omega) or np.isinf(omega):
+        return np.nan
     H = H_eq(r)
     Q_r = Q(r)
     wA2 = omega_A2(r)
@@ -157,6 +159,7 @@ def build_radial_grid():
     return np.concatenate((left, right))
 
 def validate_parameters():
+    # Only globally-fundamental validations that crash early
     if r1 <= 0:
         raise ValueError("r1 must be greater than 0")
     if r2 <= r1:
@@ -167,11 +170,6 @@ def validate_parameters():
         raise ValueError("g must be greater than 0")
     if mu0 <= 0:
         raise ValueError("mu0 must be greater than 0")
-
-    r_vals = build_radial_grid()
-    for r in r_vals:
-        if H_eq(r) <= 0:
-            raise ValueError(f"H_eq at r={r} is non-positive: {H_eq(r)}")
 
 def compute_dispersion():
     validate_parameters()
@@ -188,19 +186,39 @@ def compute_dispersion():
     max_residual = 0.0
 
     for r in r_values:
+        H = H_eq(r)
+        is_valid = (H > 0)
+
         results[r] = {
             'm_vals': m_values,
+            'is_valid': is_valid,
+            'invalid_reason': f"H_eq is non-positive: {H:.4e}" if not is_valid else "",
             'roots': [],          # List of 8 roots for each m
             'residuals': [],      # List of residuals for each root for each m
             'branch_data': np.zeros((8, len(m_values))) # For plotting real branches
         }
 
         for m_idx, m in enumerate(m_values):
+            if not is_valid:
+                # Fill with NaNs
+                roots_sorted = [np.nan + 1j*np.nan] * 8
+                results[r]['roots'].append(roots_sorted)
+                results[r]['branch_data'][:, m_idx] = np.nan
+                results[r]['residuals'].append([np.nan] * 8)
+                continue
+
             kappa_sq = kappa_squared(m, r)
             roots = solve_roots(m, r, kappa_sq)
 
-            # Sort roots by real part, then imaginary part
-            roots_sorted = sorted(roots, key=lambda x: (x.real, x.imag))
+            # Sort roots by real part, then imaginary part (treating complex numbers safely)
+            # Filter non-finite roots
+            roots_valid = [rt if np.isfinite(rt) else np.nan + 1j*np.nan for rt in roots]
+            # To sort complex numbers containing NaNs gracefully, we replace NaN with inf for sorting
+            def sort_key(rt):
+                r_val = rt.real if np.isfinite(rt.real) else np.inf
+                i_val = rt.imag if np.isfinite(rt.imag) else np.inf
+                return (r_val, i_val)
+            roots_sorted = sorted(roots_valid, key=sort_key)
             results[r]['roots'].append(roots_sorted)
 
             m_res = []
@@ -212,7 +230,7 @@ def compute_dispersion():
                     max_residual = max(max_residual, res)
 
                 # Check if real under ROOT_TOL
-                if np.abs(root.imag) < ROOT_TOL:
+                if np.isfinite(root) and np.abs(root.imag) < ROOT_TOL:
                     results[r]['branch_data'][branch_idx, m_idx] = root.real
                 else:
                     results[r]['branch_data'][branch_idx, m_idx] = np.nan
@@ -226,24 +244,36 @@ def plot_dispersion(results):
     for r in r_values:
         fig, ax = plt.subplots(figsize=(10, 8))
 
-        branch_data = results[r]['branch_data']
-        for b_idx in range(8):
-            ax.plot(
-                m_values,
-                branch_data[b_idx, :],
-                marker='o',
-                markersize=4,
-                linewidth=1.2,
-                label=f"Branch {b_idx + 1}" if r == r_values[0] else ""  # Label first plot's branches for reference
+        if not results[r]['is_valid']:
+            # Display invalid state prominently on the plot
+            ax.text(
+                0.5, 0.5,
+                f"INVALID PHYSICAL STATE\n\n{results[r]['invalid_reason']}",
+                color="red", fontsize=18, weight="bold",
+                ha="center", va="center", transform=ax.transAxes,
+                bbox=dict(facecolor='yellow', alpha=0.2, boxstyle='round,pad=1')
             )
+            ax.set_xlim(-1, 1)
+            ax.set_ylim(-1, 1)
+            ax.set_xticks([])
+            ax.set_yticks([])
+        else:
+            branch_data = results[r]['branch_data']
+            for b_idx in range(8):
+                ax.plot(
+                    m_values,
+                    branch_data[b_idx, :],
+                    marker='o',
+                    markersize=4,
+                    linewidth=1.2,
+                    label=f"Branch {b_idx + 1}" if r == r_values[0] else ""  # Label first plot's branches for reference
+                )
+            ax.grid(True, linestyle=':', alpha=0.6)
+            ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
 
         ax.set_xlabel("Azimuthal mode number $m$")
         ax.set_ylabel(r"Dimensional frequency $\omega$ [rad s$^{-1}$]")
         ax.set_title(f"Local WKB SWMHD Dispersion Relation\n$r = {r:.4e}$ m, $n = {n}$")
-        ax.grid(True, linestyle=':', alpha=0.6)
-
-        # Format axes ticks
-        ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
 
         plt.tight_layout()
         filename = os.path.join(OUTPUT_DIR, f"dispersion_r_{r:.4e}.png")
@@ -258,17 +288,23 @@ def save_results(results, max_residual):
     with open(csv_filename, 'w', newline='') as f_csv:
         writer = csv.writer(f_csv)
         writer.writerow([
-            "r [m]", "m", "root_index", "omega_real [rad/s]", "omega_imag [rad/s]", "omega_hat_real", "omega_hat_imag", "is_real"
+            "r [m]", "m", "root_index", "omega_real [rad/s]", "omega_imag [rad/s]", "omega_hat_real", "omega_hat_imag", "is_real", "is_valid"
         ])
         for r in r_values:
+            is_valid = results[r]['is_valid']
             for m_idx, m in enumerate(m_values):
                 roots = results[r]['roots'][m_idx]
                 for root_idx, rt in enumerate(roots):
-                    is_real = np.abs(rt.imag) < ROOT_TOL
-                    omega_hat = rt / (2.0 * Omega)
-                    writer.writerow([
-                        r, m, root_idx, rt.real, rt.imag, omega_hat.real, omega_hat.imag, int(is_real)
-                    ])
+                    if not is_valid or np.isnan(rt):
+                        writer.writerow([
+                            r, m, root_idx, "NaN", "NaN", "NaN", "NaN", 0, int(is_valid)
+                        ])
+                    else:
+                        is_real = np.abs(rt.imag) < ROOT_TOL
+                        omega_hat = rt / (2.0 * Omega)
+                        writer.writerow([
+                            r, m, root_idx, rt.real, rt.imag, omega_hat.real, omega_hat.imag, int(is_real), int(is_valid)
+                        ])
 
     # 2. Save NPZ for complete root data structure
     npz_filename = os.path.join(OUTPUT_DIR, "dispersion_data.npz")
@@ -303,14 +339,18 @@ def save_results(results, max_residual):
         f_rep.write(f"   Root tolerance ROOT_TOL = {ROOT_TOL}\n\n")
 
         f_rep.write("2. Radial Point Diagnostics:\n")
-        f_rep.write(f"{'Radius [m]':<15}{'H_eq [m]':<15}{'H_eq_prime':<15}{'Q(r)':<15}{'omega_A^2 [s^-2]':<15}\n")
-        f_rep.write("-" * 75 + "\n")
+        f_rep.write(f"{'Radius [m]':<15}{'H_eq [m]':<15}{'H_eq_prime':<15}{'Q(r)':<15}{'omega_A^2 [s^-2]':<15}{'Status':<15}\n")
+        f_rep.write("-" * 90 + "\n")
         for r in r_values:
             H = H_eq(r)
             Hp = dH_eq_dr(r)
             Qr = Q(r)
-            wA2 = omega_A2(r)
-            f_rep.write(f"{r:<15.4e}{H:<15.4f}{Hp:<15.4e}{Qr:<15.4e}{wA2:<15.4e}\n")
+            status = "VALID" if results[r]['is_valid'] else "INVALID"
+            if results[r]['is_valid']:
+                wA2 = omega_A2(r)
+                f_rep.write(f"{r:<15.4e}{H:<15.4f}{Hp:<15.4e}{Qr:<15.4e}{wA2:<15.4e}{status:<15}\n")
+            else:
+                f_rep.write(f"{r:<15.4e}{H:<15.4f}{Hp:<15.4e}{Qr:<15.4e}{'NaN':<15}{status:<15}\n")
         f_rep.write("\n")
 
         f_rep.write("3. Solver and Verification Metrics:\n")
@@ -320,7 +360,11 @@ def save_results(results, max_residual):
         # Count real vs complex roots
         total_real = 0
         total_complex = 0
+        total_invalid_pts = sum(1 for r in r_values if not results[r]['is_valid'])
+
         for r in r_values:
+            if not results[r]['is_valid']:
+                continue
             for m_idx in range(len(m_values)):
                 roots = results[r]['roots'][m_idx]
                 for rt in roots:
@@ -329,7 +373,8 @@ def save_results(results, max_residual):
                     else:
                         total_complex += 1
 
-        f_rep.write(f"   Total roots calculated: {total_real + total_complex}\n")
+        f_rep.write(f"   Invalid radial grid points (H_eq <= 0): {total_invalid_pts}\n")
+        f_rep.write(f"   Total valid roots calculated: {total_real + total_complex}\n")
         f_rep.write(f"   Total numerically real roots: {total_real}\n")
         f_rep.write(f"   Total numerically complex roots: {total_complex}\n")
         f_rep.write(f"   Maximum original polynomial residual across all roots: {max_residual:.4e}\n")
