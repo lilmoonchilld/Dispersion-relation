@@ -9,6 +9,7 @@ Supports:
     * Magneto-Poincaré (blue)
     * Rossby (red)
     * Magnetostrophic (orange)
+    * Magneto-Kelvin (green)
 """
 
 import os
@@ -62,6 +63,7 @@ f     = 2.0 * Omega   # Coriolis parameter [rad/s]
 USE_VARIABLE_DEPTH = True
 USE_ANALYTIC_BESSEL = False  # Set to False by default
 
+N_col = 64            # Number of Chebyshev collocation points
 N_WKB = 8             # Number of radial modes to predict/match
 
 # =============================================================================
@@ -469,6 +471,31 @@ def get_wkb_predictions(m, n, r=r0):
 
     return w_mp_p, w_mp_m, w_r, w_ms_p, w_ms_m
 
+def get_kelvin_predictions(m):
+    """
+    Computes local wall-frequency estimates for co-rotating and counter-rotating
+    Kelvin waves at the inner and outer boundaries.
+    """
+    # inner wall r1
+    Heq_1 = H_eq(r1)
+    om_A2_1 = omega_A2(r1)
+    val_1 = g * (m**2) * Heq_1 / (r1**2) - om_A2_1
+    if val_1 >= 0.0:
+        w_mk_in = -np.sqrt(val_1)
+    else:
+        w_mk_in = np.nan
+
+    # outer wall r2
+    Heq_2 = H_eq(r2)
+    om_A2_2 = omega_A2(r2)
+    val_2 = g * (m**2) * Heq_2 / (r2**2) - om_A2_2
+    if val_2 >= 0.0:
+        w_mk_out = np.sqrt(val_2)
+    else:
+        w_mk_out = np.nan
+
+    return w_mk_in, w_mk_out
+
 # =============================================================================
 # WKB BRANCH ASSIGNMENT
 # =============================================================================
@@ -478,14 +505,22 @@ def assign_branches_global(eigs, m_val, N_WKB=8):
     using a global one-to-one minimum-distance matching strategy.
     """
     wkb_preds = {} # (branch_type, n) -> frequency
+
+    # Kelvin waves
+    w_mk_in, w_mk_out = get_kelvin_predictions(m_val)
+    if not np.isnan(w_mk_in):
+        wkb_preds[('MK_in', 0)] = w_mk_in
+    if not np.isnan(w_mk_out):
+        wkb_preds[('MK_out', 0)] = w_mk_out
+
     for n in range(1, N_WKB + 1):
         w_mp_p, w_mp_m, w_r, w_ms_p, w_ms_m = get_wkb_predictions(m_val, n)
         wkb_preds[('MP+', n)] = w_mp_p
         wkb_preds[('MP-', n)] = w_mp_m
         wkb_preds[('R', n)] = w_r
         if B0 > 0.0:
-            wkb_preds[('MS+', n)] = w_ms_p
-            wkb_preds[('MS-', n)] = w_ms_m
+            if not np.isnan(w_ms_p): wkb_preds[('MS+', n)] = w_ms_p
+            if not np.isnan(w_ms_m): wkb_preds[('MS-', n)] = w_ms_m
 
     # Collect all physically allowed pairings
     allowed_matches = []
@@ -493,10 +528,10 @@ def assign_branches_global(eigs, m_val, N_WKB=8):
         for (b_type, n), w_pred in wkb_preds.items():
             if np.isnan(w_pred):
                 continue
-            # Sign constraints
-            if b_type in ['MP+', 'MS+'] and w_eig <= 0:
+            # Physical sign constraints
+            if b_type in ['MP+', 'MS+', 'MK_out'] and w_eig <= 0:
                 continue
-            if b_type in ['MP-', 'MS-'] and w_eig >= 0:
+            if b_type in ['MP-', 'MS-', 'MK_in'] and w_eig >= 0:
                 continue
 
             dist = np.abs(w_eig - w_pred)
@@ -505,7 +540,7 @@ def assign_branches_global(eigs, m_val, N_WKB=8):
     # Sort matches by absolute distance
     allowed_matches.sort(key=lambda x: x[0])
 
-    # Greedily build matching
+    # Greedily match one-to-one
     matched_eigs = {} # j -> (branch_type, n, pred_w, error)
     matched_branches = set()
     assigned_eig_indices = set()
@@ -564,7 +599,6 @@ def run_validation_checks():
     assert np.abs(Heq_r0 - H0) < 1e-10, "Depth consistency failed!"
 
     # Test B: Derivative consistency
-    # Compare analytic derivative against second-order central finite difference
     dr = 1.0 # 1 meter step
     analytic_deriv = dH_eq_dr(r0)
     fd_deriv = (H_eq(r0 + dr) - H_eq(r0 - dr)) / (2.0 * dr)
@@ -584,7 +618,6 @@ def run_validation_checks():
         print("Test C [Magnetic Derivative]: B0 = 0.0, skipped or trivially verified.")
 
     # Test D: Boundary condition & Test E: ODE residual
-    # Perform check for a sample eigenvalue of m=1
     N_sample = 64
     r_grid, D1_mat, D2_mat = chebyshev_lobatto(N_sample, r1, r2)
     roots = find_eigenvalues(1, N_sample, r_grid, D1_mat, D2_mat)
@@ -595,7 +628,6 @@ def run_validation_checks():
         eta = get_eigenfunction(w_test, 1, N_sample, r_grid, D1_mat, D2_mat)
 
         # Test D: Boundary condition residual
-        # BC: ws * D1 * eta - (m * f / rb) * eta = 0
         for b_name, b_idx in [("inner", 0), ("outer", -1)]:
             rb = r_grid[b_idx]
             ws_b = omega_star(w_test, rb)
@@ -604,7 +636,6 @@ def run_validation_checks():
 
         # Test E: ODE residual
         C2, C1, C0 = radial_coefficients(w_test, 1, r_grid)
-        # Check interior points (indices 1 to N_sample-2)
         ode_res = C2 * (D2_mat @ eta) + C1 * (D1_mat @ eta) + C0 * eta
         interior_res = ode_res[1:-1]
         l2_res = np.sqrt(np.sum(np.abs(interior_res)**2) / (N_sample - 2))
@@ -698,7 +729,6 @@ def compute_dispersion_relation():
 
     M_max = 30
     m_arr = np.arange(1, M_max + 1)
-    N_col = 64
 
     r_grid, D1_mat, D2_mat = chebyshev_lobatto(N_col, r1, r2)
 
@@ -766,7 +796,7 @@ def compute_dispersion_relation():
 
         # Store structured classifications
         branch_assignments = {
-            'MP+': {}, 'MP-': {}, 'R': {}, 'MS+': {}, 'MS-': {}, 'unassigned': []
+            'MP+': {}, 'MP-': {}, 'R': {}, 'MS+': {}, 'MS-': {}, 'MK_in': [], 'MK_out': [], 'unassigned': []
         }
 
         for m in m_arr:
@@ -779,13 +809,20 @@ def compute_dispersion_relation():
             for j, w_eig in enumerate(eigs):
                 if j in matches:
                     b_type, n, w_wkb, err = matches[j]
-                    branch_assignments[b_type].setdefault(n, []).append((m, w_eig, w_wkb, err))
 
-                    # Optional Test 17: Phase integral verification
-                    theta = evaluate_phase_integral(w_eig, m)
-                    phase_err = np.abs(theta - n * np.pi) / (n * np.pi)
+                    if b_type == 'MK_in':
+                        branch_assignments['MK_in'].append((m, w_eig, w_wkb, err))
+                        print(f"    Assigned: MK_in -> omega_hat = {w_eig/f:+.4f} (WKB = {w_wkb/f:+.4f}, Err = {err/f:.4f}) [Chirality Valid: {w_eig < 0}]")
+                    elif b_type == 'MK_out':
+                        branch_assignments['MK_out'].append((m, w_eig, w_wkb, err))
+                        print(f"    Assigned: MK_out -> omega_hat = {w_eig/f:+.4f} (WKB = {w_wkb/f:+.4f}, Err = {err/f:.4f}) [Chirality Valid: {w_eig > 0}]")
+                    else:
+                        branch_assignments[b_type].setdefault(n, []).append((m, w_eig, w_wkb, err))
 
-                    print(f"    Assigned: {b_type} n={n} -> omega_hat = {w_eig/f:+.4f} (WKB = {w_wkb/f:+.4f}, Err = {err/f:.4f}, Phase Err = {phase_err:.2%})")
+                        # Optional Test 17: Phase integral verification
+                        theta = evaluate_phase_integral(w_eig, m)
+                        phase_err = np.abs(theta - n * np.pi) / (n * np.pi)
+                        print(f"    Assigned: {b_type} n={n} -> omega_hat = {w_eig/f:+.4f} (WKB = {w_wkb/f:+.4f}, Err = {err/f:.4f}, Phase Err = {phase_err:.2%})")
                 else:
                     branch_assignments['unassigned'].append((m, w_eig))
                     print(f"    Unassigned: omega_hat = {w_eig/f:+.4f}")
@@ -809,6 +846,9 @@ def plot_dispersion_relation(x_arr, dispersion_data):
         'MS':  '#ff7f0e', # orange
         'unassigned': 'gray'
     }
+
+    # Calculate global guide lines
+    hat_omA = np.sqrt(omega_A2(r0)) / f
 
     if USE_ANALYTIC_BESSEL and not USE_VARIABLE_DEPTH:
         # Plot continuous Bessel branches
@@ -858,11 +898,23 @@ def plot_dispersion_relation(x_arr, dispersion_data):
         # Plot Chebyshev and WKB curves
         m_fine = np.linspace(1.0, 30.0, 400)
 
-        # Plot continuous WKB predictions
+        # Plot Magneto-Kelvin curves (MK is green)
+        w_mk_in_list = []
+        w_mk_out_list = []
+        for m in m_fine:
+            w_mk_in, w_mk_out = get_kelvin_predictions(m)
+            w_mk_in_list.append(w_mk_in)
+            w_mk_out_list.append(w_mk_out)
+
+        ax1.plot(m_fine, np.array(w_mk_in_list) / f, color=COLORS['MK'], lw=2.5, label='Magneto-Kelvin (WKB)', zorder=4)
+        ax1.plot(m_fine, np.array(w_mk_out_list) / f, color=COLORS['MK'], lw=2.5, zorder=4)
+        ax2.plot(m_fine, np.array(w_mk_in_list) / f, color=COLORS['MK'], lw=2.5, label='Magneto-Kelvin (WKB)', zorder=4)
+        ax2.plot(m_fine, np.array(w_mk_out_list) / f, color=COLORS['MK'], lw=2.5, zorder=4)
+
+        # Plot continuous WKB predictions for n = 1 ... N_WKB
         for n in range(1, N_WKB + 1):
             alpha_val = max(0.1, 0.4 - 0.05 * (n - 1))
 
-            # WKB branches
             w_mp_p_list = []
             w_mp_m_list = []
             w_r_list = []
@@ -883,9 +935,9 @@ def plot_dispersion_relation(x_arr, dispersion_data):
             w_ms_p_list = np.array(w_ms_p_list) / f
             w_ms_m_list = np.array(w_ms_m_list) / f
 
-            lbl_mp = f'Magneto-Poincaré n={n}' if n <= 2 else None
-            lbl_r = f'Rossby n={n}' if n <= 2 else None
-            lbl_ms = f'Magnetostrophic n={n}' if (n <= 2 and B0 > 0.0) else None
+            lbl_mp = f'Magneto-Poincaré n={n} (WKB)' if n <= 2 else None
+            lbl_r = f'Rossby n={n} (WKB)' if n <= 2 else None
+            lbl_ms = f'Magnetostrophic n={n} (WKB)' if (n <= 2 and B0 > 0.0) else None
 
             # Plot WKB MP
             ax1.plot(m_fine, w_mp_p_list, color=COLORS['MP'], lw=1.5, alpha=alpha_val, label=lbl_mp)
@@ -911,11 +963,20 @@ def plot_dispersion_relation(x_arr, dispersion_data):
                     continue
                 m_vals = [p[0] for p in pts]
                 w_vals = [p[1] / f for p in pts]
-                lbl = f'Global {color_key}' if n == 1 else None
+                lbl = f'Global {color_key} (collocation)' if n == 1 else None
 
                 ax1.scatter(m_vals, w_vals, color=COLORS[color_key], marker='o', s=30, alpha=0.85, zorder=5, label=lbl)
                 if 'MP' not in b_type:
                     ax2.scatter(m_vals, w_vals, color=COLORS[color_key], marker='o', s=45, alpha=0.85, zorder=5, label=lbl)
+
+        # Plot assigned Kelvin collocation points
+        for b_type, mk_lbl in [('MK_in', 'Magneto-Kelvin inner'), ('MK_out', 'Magneto-Kelvin outer')]:
+            pts = dispersion_data[b_type]
+            if len(pts) > 0:
+                m_vals = [p[0] for p in pts]
+                w_vals = [p[1] / f for p in pts]
+                ax1.scatter(m_vals, w_vals, color=COLORS['MK'], marker='s', s=55, alpha=0.85, zorder=6, label=f'Global {mk_lbl} (collocation)')
+                ax2.scatter(m_vals, w_vals, color=COLORS['MK'], marker='s', s=55, alpha=0.85, zorder=6, label=f'Global {mk_lbl} (collocation)')
 
         # Plot unassigned eigenvalues as neutral scatter dots
         unassigned_pts = dispersion_data['unassigned']
@@ -928,32 +989,38 @@ def plot_dispersion_relation(x_arr, dispersion_data):
         ax1.axhline(0, color='grey', lw=0.8, ls=':')
         ax1.axhline(+1, color='grey', lw=0.9, ls='--', alpha=0.5)
         ax1.axhline(-1, color='grey', lw=0.9, ls='--', alpha=0.5)
+        if hat_omA > 0.0:
+            ax1.axhline(+hat_omA, color='purple', lw=0.8, ls=':', alpha=0.6)
+            ax1.axhline(-hat_omA, color='purple', lw=0.8, ls=':', alpha=0.6)
+            ax2.axhline(+hat_omA, color='purple', lw=0.8, ls=':', alpha=0.6)
+            ax2.axhline(-hat_omA, color='purple', lw=0.8, ls=':', alpha=0.6)
 
-        ax1.set_xlabel('Azimuthal wavenumber $m$', fontsize=15)
-        ax1.set_ylabel(r'Normalised frequency $\hat\omega = \omega/(2\Omega)$', fontsize=15)
-        ax1.set_xlim(0.5, len(x_arr) + 0.5)
+        ax1.set_xlabel('Azimuthal wavenumber $m$', fontsize=13)
+        ax1.set_ylabel(r'Normalised frequency $\hat\omega = \omega/(2\Omega)$', fontsize=13)
+        ax1.set_xlim(0.7, len(x_arr) + 0.5)
         ax1.set_ylim(-50.0, 50.0)
         ax1.set_xticks(x_arr[::2])
         ax1.grid(True, alpha=0.22)
-        ax1.set_title('Full Spectrum', fontsize=14)
+        ax1.set_title('Full spectrum', fontsize=11)
 
         ax2.axhline(0, color='grey', lw=0.8, ls=':')
-        ax2.set_xlabel('Azimuthal wavenumber $m$', fontsize=15)
-        ax2.set_ylabel(r'Normalised frequency $\hat\omega = \omega/(2\Omega)$', fontsize=15)
-        ax2.set_xlim(0.5, len(x_arr) + 0.5)
-        ax2.set_ylim(-0.8, 0.2)
+        ax2.set_xlabel('Azimuthal wavenumber $m$', fontsize=13)
+        ax2.set_ylabel(r'Normalised frequency $\hat\omega = \omega/(2\Omega)$', fontsize=13)
+        ax2.set_xlim(0.7, len(x_arr) + 0.5)
+        ax2.set_ylim(-0.8, 0.8)
         ax2.set_xticks(x_arr[::2])
         ax2.grid(True, alpha=0.22)
-        ax2.set_title('Slow Branches Zoom', fontsize=14)
+        ax2.set_title('Slow branches zoom (Rossby & MS)', fontsize=11)
 
-        # Figure legends
-        handles1, labels1 = ax1.get_legend_handles_labels()
-        by_label1 = dict(zip(labels1, handles1))
-        ax1.legend(by_label1.values(), by_label1.keys(), loc='upper left', fontsize=10, framealpha=0.9)
-
-        handles2, labels2 = ax2.get_legend_handles_labels()
-        by_label2 = dict(zip(labels2, handles2))
-        ax2.legend(by_label2.values(), by_label2.keys(), loc='lower left', fontsize=10, framealpha=0.9)
+        # Annotate n=1,2 on left panel at m=1 for MP
+        w_mp_1, _, _, _, _ = get_wkb_predictions(1.0, 1)
+        w_mp_2, _, _, _, _ = get_wkb_predictions(1.0, 2)
+        ax1.annotate('$n=1$', xy=(1.0, w_mp_1 / f), xytext=(2.5, w_mp_1 / f + 1.5),
+                     fontsize=9, color=COLORS['MP'],
+                     arrowprops=dict(arrowstyle='->', color=COLORS['MP'], lw=0.8))
+        ax1.annotate('$n=2$', xy=(1.0, w_mp_2 / f), xytext=(2.5, w_mp_2 / f + 3.0),
+                     fontsize=9, color=COLORS['MP'],
+                     arrowprops=dict(arrowstyle='->', color=COLORS['MP'], lw=0.8))
 
     # Figure wide legend placed outside the right panel
     handles1, labels1 = ax1.get_legend_handles_labels()
@@ -984,16 +1051,18 @@ def plot_dispersion_relation(x_arr, dispersion_data):
 
     # Parameter box
     pbox = (
-        rf"$\Omega = {Omega:.1e}$ rad/s,  $H_0 = {H0}$ m" + "\n"
+        rf"$\hat{{\omega}}_A(r_0) = {hat_omA:.4f}$" + "\n"
+        rf"$H_0 = {H0}$ m" + "\n"
+        rf"$\Omega = {Omega:.1e}$ rad/s" + "\n"
         rf"$r_1 = {r1:.1e}$ m,  $r_2 = {r2:.1e}$ m" + "\n"
-        rf"$\omega_A(r_0) = {np.sqrt(omega_A2(r0)):.2e}$ s$^{{-1}}$" + "\n"
-        rf"Solver: {title_suffix}"
+        rf"$C = {C:.3e}$ m$^3$/s$^2$" + "\n"
+        rf"$N = {N_col}$"
     )
-    fig.text(0.52, 0.015, pbox, fontsize=11, va='bottom', ha='center',
+    fig.text(0.52, 0.015, pbox, fontsize=10, va='bottom', ha='center',
              bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.92))
 
     fig.subplots_adjust(bottom=0.15, right=0.78)
-    plt.tight_layout(rect=[0, 0.12, 0.78, 0.95])
+    plt.tight_layout(rect=[0, 0.12, 0.78, 1])
 
     plt.savefig("outputs/swmhd_variable_depth_global_dispersion.png", dpi=180, bbox_inches='tight')
     plt.savefig("outputs/swmhd_variable_depth_global_dispersion.pdf", dpi=180, bbox_inches='tight')
@@ -1004,7 +1073,6 @@ def plot_dispersion_relation(x_arr, dispersion_data):
     # Save separate versions of panels and legend as requested
     fig_left, ax_l = plt.subplots(figsize=(8, 6))
     if USE_ANALYTIC_BESSEL and not USE_VARIABLE_DEPTH:
-        # Plot continuous Bessel branches
         pos_branches = dispersion_data['pos_branches']
         neg_branches = dispersion_data['neg_branches']
         for n, k_pts, omega_pts in pos_branches:
@@ -1016,7 +1084,32 @@ def plot_dispersion_relation(x_arr, dispersion_data):
         ax_l.set_xlabel('Wavenumber $k$')
         ax_l.set_xlim(1.0, 30.0)
     else:
-        # Plot scatter
+        # Plot MK WKB curves
+        ax_l.plot(m_fine, np.array(w_mk_in_list) / f, color=COLORS['MK'], lw=2.5)
+        ax_l.plot(m_fine, np.array(w_mk_out_list) / f, color=COLORS['MK'], lw=2.5)
+
+        # Plot continuous WKB lines
+        for n in range(1, N_WKB + 1):
+            alpha_val = max(0.1, 0.4 - 0.05 * (n - 1))
+            w_mp_p_list = []
+            w_mp_m_list = []
+            w_r_list = []
+            w_ms_p_list = []
+            w_ms_m_list = []
+            for m in m_fine:
+                w_mp_p, w_mp_m, w_r, w_ms_p, w_ms_m = get_wkb_predictions(m, n)
+                w_mp_p_list.append(w_mp_p)
+                w_mp_m_list.append(w_mp_m)
+                w_r_list.append(w_r)
+                w_ms_p_list.append(w_ms_p)
+                w_ms_m_list.append(w_ms_m)
+            ax_l.plot(m_fine, np.array(w_mp_p_list) / f, color=COLORS['MP'], lw=1.5, alpha=alpha_val)
+            ax_l.plot(m_fine, np.array(w_mp_m_list) / f, color=COLORS['MP'], lw=1.5, alpha=alpha_val)
+            ax_l.plot(m_fine, np.array(w_r_list) / f, color=COLORS['R'], lw=1.5, alpha=alpha_val)
+            if B0 > 0.0:
+                ax_l.plot(m_fine, np.array(w_ms_p_list) / f, color=COLORS['MS'], lw=1.5, alpha=alpha_val)
+                ax_l.plot(m_fine, np.array(w_ms_m_list) / f, color=COLORS['MS'], lw=1.5, alpha=alpha_val)
+
         for b_type in ['MP+', 'MP-', 'R', 'MS+', 'MS-']:
             color_key = 'MP' if 'MP' in b_type else ('R' if b_type == 'R' else 'MS')
             for n in sorted(dispersion_data[b_type].keys()):
@@ -1026,8 +1119,22 @@ def plot_dispersion_relation(x_arr, dispersion_data):
                 m_vals = [p[0] for p in pts]
                 w_vals = [p[1] / f for p in pts]
                 ax_l.scatter(m_vals, w_vals, color=COLORS[color_key], marker='o', s=30, alpha=0.85)
+
+        for b_type in ['MK_in', 'MK_out']:
+            pts = dispersion_data[b_type]
+            if len(pts) > 0:
+                m_vals = [p[0] for p in pts]
+                w_vals = [p[1] / f for p in pts]
+                ax_l.scatter(m_vals, w_vals, color=COLORS['MK'], marker='s', s=55, alpha=0.85, zorder=6)
+
+        unassigned_pts = dispersion_data['unassigned']
+        if len(unassigned_pts) > 0:
+            m_un = [p[0] for p in unassigned_pts]
+            w_un = [p[1] / f for p in unassigned_pts]
+            ax_l.scatter(m_un, w_un, color=COLORS['unassigned'], marker='x', s=20, alpha=0.5)
+
         ax_l.set_xlabel('Azimuthal wavenumber $m$')
-        ax_l.set_xlim(0.5, len(x_arr) + 0.5)
+        ax_l.set_xlim(0.7, len(x_arr) + 0.5)
 
     ax_l.axhline(0, color='grey', lw=0.8, ls=':')
     ax_l.set_ylabel(r'Normalised frequency $\hat\omega$')
@@ -1051,23 +1158,55 @@ def plot_dispersion_relation(x_arr, dispersion_data):
         ax_r.set_xlabel('Wavenumber $k$')
         ax_r.set_xlim(1.0, 30.0)
     else:
-        for b_type in ['R', 'MS+', 'MS-']:
-            color_key = 'R' if b_type == 'R' else 'MS'
-            for n in sorted(dispersion_data[b_type].keys()):
-                pts = dispersion_data[b_type][n]
-                if len(pts) == 0:
-                    continue
+        # Plot continuous WKB lines for Rossby / MS
+        for n in range(1, N_WKB + 1):
+            alpha_val = max(0.1, 0.4 - 0.05 * (n - 1))
+            w_r_list = []
+            w_ms_p_list = []
+            w_ms_m_list = []
+            for m in m_fine:
+                _, _, w_r, w_ms_p, w_ms_m = get_wkb_predictions(m, n)
+                w_r_list.append(w_r)
+                w_ms_p_list.append(w_ms_p)
+                w_ms_m_list.append(w_ms_m)
+            ax_r.plot(m_fine, np.array(w_r_list) / f, color=COLORS['R'], lw=1.5, alpha=alpha_val)
+            if B0 > 0.0:
+                ax_r.plot(m_fine, np.array(w_ms_p_list) / f, color=COLORS['MS'], lw=1.5, alpha=alpha_val)
+                ax_r.plot(m_fine, np.array(w_ms_m_list) / f, color=COLORS['MS'], lw=1.5, alpha=alpha_val)
+
+        # Plot collocation
+        for b_type in ['R', 'MS+', 'MS-', 'MK_in', 'MK_out']:
+            color_key = 'R' if b_type == 'R' else ('MS' if 'MS' in b_type else 'MK')
+            marker_val = 's' if 'MK' in b_type else 'o'
+            size_val = 55 if 'MK' in b_type else 45
+            z_order_val = 6 if 'MK' in b_type else 5
+
+            if b_type in ['MK_in', 'MK_out']:
+                pts = dispersion_data[b_type]
+            else:
+                pts = []
+                for n in sorted(dispersion_data[b_type].keys()):
+                    pts.extend(dispersion_data[b_type][n])
+
+            if len(pts) > 0:
                 m_vals = [p[0] for p in pts]
                 w_vals = [p[1] / f for p in pts]
-                ax_r.scatter(m_vals, w_vals, color=COLORS[color_key], marker='o', s=45, alpha=0.85)
+                ax_r.scatter(m_vals, w_vals, color=COLORS[color_key], marker=marker_val, s=size_val, alpha=0.85, zorder=z_order_val)
+
+        unassigned_pts = dispersion_data['unassigned']
+        if len(unassigned_pts) > 0:
+            m_un = [p[0] for p in unassigned_pts]
+            w_un = [p[1] / f for p in unassigned_pts]
+            ax_r.scatter(m_un, w_un, color=COLORS['unassigned'], marker='x', s=25, alpha=0.5)
+
         ax_r.set_xlabel('Azimuthal wavenumber $m$')
-        ax_r.set_xlim(0.5, len(x_arr) + 0.5)
+        ax_r.set_xlim(0.7, len(x_arr) + 0.5)
 
     ax_r.axhline(0, color='grey', lw=0.8, ls=':')
     ax_r.set_ylabel(r'Normalised frequency $\hat\omega$')
-    ax_r.set_ylim(-0.8, 0.2)
+    ax_r.set_ylim(-0.8, 0.8)
     ax_r.grid(True, alpha=0.22)
-    ax_r.set_title('Slow Branches Zoom')
+    ax_r.set_title('Slow branches zoom (Rossby & MS)')
     plt.tight_layout()
     plt.savefig("outputs/SlowSpectrum_variable_depth.png", dpi=300, bbox_inches='tight')
     plt.close(fig_right)
