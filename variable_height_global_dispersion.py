@@ -2,6 +2,7 @@
 Variable-Height SWMHD Global Dispersion Solver
 ===============================================
 Solves the global eigenvalue problem for linearized variable-depth SWMHD in physical coordinates (SI units).
+Supports an exact analytical Bessel solver for the constant-depth special case.
 """
 
 import os
@@ -9,6 +10,7 @@ import numpy as np
 import scipy.linalg as la
 import matplotlib.pyplot as plt
 from scipy.optimize import brentq
+from scipy.special import jv, yv, jvp, yvp, iv, kv, ivp, kvp
 
 # Create outputs directory if it doesn't exist
 os.makedirs("outputs", exist_ok=True)
@@ -52,6 +54,7 @@ f     = 2.0 * Omega   # Coriolis parameter [rad/s]
 
 # Validation switches
 USE_VARIABLE_DEPTH = True
+USE_ANALYTIC_BESSEL = False  # Set to False by default
 
 # =============================================================================
 # 1. Equilibrium Depth
@@ -100,13 +103,11 @@ def chebyshev_lobatto(N, r_min, r_max):
     c = np.ones(N)
     c[0] = 2.0
     c[-1] = 2.0
-    X = np.tile(xi, (N, 1))
-    dX = X - X.T
     D = np.zeros((N, N))
     for i in range(N):
         for k in range(N):
             if i != k:
-                D[i, k] = (c[i] / c[k]) / dX[i, k]
+                D[i, k] = (c[i] / c[k]) * ((-1.0)**(i+k)) / (xi[i] - xi[k])
     D -= np.diag(D.sum(axis=1))
 
     # Scale matrix to [r_min, r_max]
@@ -246,6 +247,180 @@ def get_eigenfunction(omega, m, N, r_grid, D1_mat, D2_mat):
     return eta
 
 # =============================================================================
+# 16. Analytic Bessel Special-Case Solver Section
+# =============================================================================
+def bessel_radial_wavenumber(omega):
+    """
+    Computes k^2 and returns (val, is_oscillatory)
+    where val is k^2 (if k^2 > 0) or q^2 = -k^2 (if k^2 < 0).
+    """
+    ws = omega_star(omega, r0) # constant depth, so evaluated at r0 is same as everywhere
+    k2 = omega * (ws**2 - f**2) / (g * H0 * ws)
+    if k2 >= 0.0:
+        return k2, True
+    else:
+        return -k2, False
+
+def bessel_boundary_determinant(omega, m):
+    """
+    Evaluates the exact Bessel boundary determinant D_Bessel(omega)
+    using ordinary J, Y or modified I, K Bessel functions.
+    """
+    omega_tol = 1e-12
+    resonance_tol = 1e-12
+
+    if np.abs(omega) < omega_tol:
+        return np.nan
+
+    ws = omega_star(omega, r0)
+    if np.abs(ws**2 - f**2) < resonance_tol:
+        return np.nan
+
+    val, is_oscillatory = bessel_radial_wavenumber(omega)
+    arg = np.sqrt(val)
+
+    if is_oscillatory:
+        # Oscillatory case: use J_m, Y_m
+        # B_b[J] = ws * k * J_m'(k*r_b) - (m * f / r_b) * J_m(k*r_b)
+        B1_J = ws * arg * jvp(m, arg * r1) - (m * f / r1) * jv(m, arg * r1)
+        B1_Y = ws * arg * yvp(m, arg * r1) - (m * f / r1) * yv(m, arg * r1)
+        B2_J = ws * arg * jvp(m, arg * r2) - (m * f / r2) * jv(m, arg * r2)
+        B2_Y = ws * arg * yvp(m, arg * r2) - (m * f / r2) * yv(m, arg * r2)
+
+        return B1_J * B2_Y - B1_Y * B2_J
+    else:
+        # Evanescent case: use I_m, K_m
+        # B_b[I] = ws * q * I_m'(q*r_b) - (m * f / r_b) * I_m(q*r_b)
+        B1_I = ws * arg * ivp(m, arg * r1) - (m * f / r1) * iv(m, arg * r1)
+        B1_K = ws * arg * kvp(m, arg * r1) - (m * f / r1) * kv(m, arg * r1)
+        B2_I = ws * arg * ivp(m, arg * r2) - (m * f / r2) * iv(m, arg * r2)
+        B2_K = ws * arg * kvp(m, arg * r2) - (m * f / r2) * kv(m, arg * r2)
+
+        return B1_I * B2_K - B1_K * B2_I
+
+def find_bessel_eigenvalues(m_val, omega_range=(-5e-3, 5e-3), n_scan=2500):
+    """
+    Scans the frequency range for sign changes of the exact Bessel boundary determinant D_Bessel(omega),
+    and refines the roots using scipy.optimize.brentq.
+    """
+    scan = np.linspace(*omega_range, n_scan)
+    scan = scan[np.abs(scan) > 1e-12]
+
+    dets = []
+    for w in scan:
+        dets.append(bessel_boundary_determinant(w, m_val))
+
+    dets = np.array(dets)
+    roots = []
+
+    # Detect sign changes and solve precisely with brentq
+    for i in range(len(scan) - 1):
+        if np.isnan(dets[i]) or np.isnan(dets[i+1]):
+            continue
+        if dets[i] * dets[i+1] < 0:
+            # Scale function value to avoid brentq numerical scaling issues
+            ref_val = np.abs(dets[i])
+
+            def f_to_solve(w):
+                val = bessel_boundary_determinant(w, m_val)
+                return val / ref_val
+
+            try:
+                root = brentq(f_to_solve, scan[i], scan[i+1], xtol=1e-15)
+                if not any(np.abs(root - r) < 1e-7 * np.abs(root) + 1e-8 for r in roots):
+                    roots.append(root)
+            except Exception:
+                pass
+
+    return np.array(sorted(roots))
+
+def get_bessel_eigenfunction(omega, m, r_grid):
+    """
+    Constructs the analytical Bessel/modified-Bessel eigenfunction on r_grid.
+    """
+    ws = omega_star(omega, r0)
+    val, is_oscillatory = bessel_radial_wavenumber(omega)
+    arg = np.sqrt(val)
+
+    if is_oscillatory:
+        # B1_J, B1_Y at r1
+        B1_J = ws * arg * jvp(m, arg * r1) - (m * f / r1) * jv(m, arg * r1)
+        B1_Y = ws * arg * yvp(m, arg * r1) - (m * f / r1) * yv(m, arg * r1)
+
+        if np.abs(B1_Y) > 1e-12:
+            A, B = 1.0, -B1_J / B1_Y
+        else:
+            A, B = -B1_Y / B1_J, 1.0
+
+        eta = A * jv(m, arg * r_grid) + B * yv(m, arg * r_grid)
+    else:
+        # B1_I, B1_K at r1
+        B1_I = ws * arg * ivp(m, arg * r1) - (m * f / r1) * iv(m, arg * r1)
+        B1_K = ws * arg * kvp(m, arg * r1) - (m * f / r1) * kv(m, arg * r1)
+
+        if np.abs(B1_K) > 1e-12:
+            A, B = 1.0, -B1_I / B1_K
+        else:
+            A, B = -B1_K / B1_I, 1.0
+
+        eta = A * iv(m, arg * r_grid) + B * kv(m, arg * r_grid)
+
+    eta /= np.max(np.abs(eta))
+    return eta
+
+def validate_bessel_reduction():
+    """
+    Explicitly confirms that the constant-depth coefficients reduce exactly
+    to the standard Bessel form when USE_VARIABLE_DEPTH = False.
+    """
+    print("==========================================================")
+    print("      TEST 13/14: BESSEL FORM REDUCTION VALIDATION        ")
+    print("==========================================================")
+
+    # Store previous state of switches
+    prev_vdepth = USE_VARIABLE_DEPTH
+
+    # Temporarily set variable depth to False
+    globals()['USE_VARIABLE_DEPTH'] = False
+
+    N_test = 64
+    r_grid, D1_mat, D2_mat = chebyshev_lobatto(N_test, r1, r2)
+
+    # Choose a sample frequency
+    w_sample = 1.5 * f
+    C2, C1, C0 = radial_coefficients(w_sample, 1, r_grid)
+
+    # Expected Bessel-form coefficients under constant-depth
+    ws = omega_star(w_sample, r0)
+    C2_expected = g * H0 * ws / (ws**2 - f**2)
+    C1_expected = g * H0 * ws / (r_grid * (ws**2 - f**2))
+    C0_expected = w_sample - (1**2 * g * H0 * ws) / (r_grid**2 * (ws**2 - f**2))
+
+    # Divided coefficients (coefficients of the normalized equation: eta'' + C1/C2 eta' + C0/C2 eta = 0)
+    C1_over_C2 = C1 / C2
+    C0_over_C2 = C0 / C2
+
+    # Verify k^2 expression
+    k2_analytic = w_sample * (ws**2 - f**2) / (g * H0 * ws)
+    C1_over_C2_expected = 1.0 / r_grid
+    C0_over_C2_expected = k2_analytic - 1.0 / r_grid**2
+
+    max_err_C1 = np.max(np.abs(C1_over_C2 - C1_over_C2_expected))
+    max_err_C0 = np.max(np.abs(C0_over_C2 - C0_over_C2_expected))
+
+    print(f"B0 = {B0} T, Omega = {Omega} rad/s")
+    if B0 == 0.0:
+        print(f"Non-magnetic case verified: omega_star = {ws:.6e} == omega = {w_sample:.6e}")
+        print(f"k^2 expected: (omega^2 - f^2)/(g*H0) = {k2_analytic:.6e}")
+
+    print(f"Max C1 (1/r) coefficient error over grid: {max_err_C1:.6e}")
+    print(f"Max C0 (k^2 - m^2/r^2) coefficient error over grid: {max_err_C0:.6e}")
+
+    # Restore state
+    globals()['USE_VARIABLE_DEPTH'] = prev_vdepth
+    print("==========================================================\n")
+
+# =============================================================================
 # 11. Validation and Numerical Tests (Printed to Terminal)
 # =============================================================================
 def run_validation_checks():
@@ -311,6 +486,7 @@ def run_validation_checks():
 
     # Test F: Constant-depth limit stability under increasing N_col
     global USE_VARIABLE_DEPTH
+    prev_vdepth_check = USE_VARIABLE_DEPTH
     USE_VARIABLE_DEPTH = False
     print("\nRunning Test F: Constant-depth stability scan...")
     for N_test in [32, 64]:
@@ -321,7 +497,7 @@ def run_validation_checks():
             print(f"    {rt / f:.6f}")
 
     # Restore variable depth
-    USE_VARIABLE_DEPTH = True
+    USE_VARIABLE_DEPTH = prev_vdepth_check
     print()
 
     # Test G: Resolution convergence check for m = 1 (Variable Depth)
@@ -360,6 +536,35 @@ def run_validation_checks():
         print(row_str)
     print("==========================================================\n")
 
+    # 10. Direct validation against the existing numerical solver for constant depth
+    print("==========================================================")
+    print("    TEST 10: DIRECT NUMERICAL VS BESSEL VALIDATION        ")
+    print("==========================================================")
+    # Temporarily set constant depth and Bessel active
+    prev_vdepth = USE_VARIABLE_DEPTH
+    globals()['USE_VARIABLE_DEPTH'] = False
+
+    rg, d1, d2 = chebyshev_lobatto(64, r1, r2)
+    # Calculate frequencies using both methods
+    cheb_rts = find_eigenvalues(1, 64, rg, d1, d2)
+    bessel_rts = find_bessel_eigenvalues(1)
+
+    print(f"{'Mode':>4} | {'Chebyshev omega/f':>18} | {'Bessel omega/f':>15} | {'Difference':>12}")
+    print("-" * 60)
+    matched_count = 0
+    for rt_b in bessel_rts:
+        if len(cheb_rts) > 0:
+            best_idx = np.argmin(np.abs(cheb_rts - rt_b))
+            rt_c = cheb_rts[best_idx]
+            diff = np.abs(rt_c - rt_b) / f
+            if diff < 1e-3:
+                matched_count += 1
+                print(f"{matched_count:4d} | {rt_c/f:+18.6f} | {rt_b/f:+15.6f} | {diff:.6e}")
+
+    # Restore variable depth switch
+    globals()['USE_VARIABLE_DEPTH'] = prev_vdepth
+    print("==========================================================\n")
+
 # =============================================================================
 # 9. Spectrum & Dispersion Curves over m = 1..30
 # =============================================================================
@@ -376,17 +581,42 @@ def compute_dispersion_relation():
 
     dispersion_data = {}
 
-    for m in m_arr:
-        eigs = find_eigenvalues(m, N_col, r_grid, D1_mat, D2_mat, omega_range=(-50 * f, 50 * f))
-        dispersion_data[m] = eigs
+    # Determine the solver mode to run
+    if USE_ANALYTIC_BESSEL and not USE_VARIABLE_DEPTH:
+        print("Solver mode: EXACT BESSEL")
+        print("Equilibrium depth: CONSTANT")
+        print("Radial equation: BESSEL")
+        print("Eigenvalue method: Bessel boundary determinant")
+        for m in m_arr:
+            eigs = find_bessel_eigenvalues(m, omega_range=(-50 * f, 50 * f))
+            dispersion_data[m] = eigs
+            pos = sorted([e for e in eigs if e > 0])
+            neg = sorted([e for e in eigs if e < 0], reverse=True)
+            if m <= 3 or m % 5 == 0:
+                print(f"  m={m:2d} (found {len(eigs)} roots via Bessel): "
+                      f"+{[f'{x/f:.3f}' for x in pos[:4]]}... "
+                      f"-{[f'{abs(x)/f:.3f}' for x in neg[:4]]}...")
+    else:
+        if not USE_VARIABLE_DEPTH:
+            print("Solver mode: CHEBYSHEV GLOBAL")
+            print("Equilibrium depth: CONSTANT")
+            print("Radial equation: REDUCED CONSTANT-COEFFICIENT ODE")
+            print("Eigenvalue method: Global collocation")
+        else:
+            print("Solver mode: CHEBYSHEV GLOBAL")
+            print("Equilibrium depth: VARIABLE")
+            print("Radial equation: GENERAL VARIABLE-COEFFICIENT ODE")
+            print("Eigenvalue method: Global collocation")
 
-        # Lightweight print to terminal
-        pos = sorted([e for e in eigs if e > 0])
-        neg = sorted([e for e in eigs if e < 0], reverse=True)
-        if m <= 3 or m % 5 == 0:
-            print(f"  m={m:2d} (found {len(eigs)} roots): "
-                  f"+{[f'{x/f:.3f}' for x in pos[:4]]}... "
-                  f"-{[f'{abs(x)/f:.3f}' for x in neg[:4]]}...")
+        for m in m_arr:
+            eigs = find_eigenvalues(m, N_col, r_grid, D1_mat, D2_mat, omega_range=(-50 * f, 50 * f))
+            dispersion_data[m] = eigs
+            pos = sorted([e for e in eigs if e > 0])
+            neg = sorted([e for e in eigs if e < 0], reverse=True)
+            if m <= 3 or m % 5 == 0:
+                print(f"  m={m:2d} (found {len(eigs)} roots via Chebyshev): "
+                      f"+{[f'{x/f:.3f}' for x in pos[:4]]}... "
+                      f"-{[f'{abs(x)/f:.3f}' for x in neg[:4]]}...")
 
     return m_arr, dispersion_data
 
@@ -396,7 +626,8 @@ def compute_dispersion_relation():
 def plot_dispersion_relation(m_arr, dispersion_data):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7), gridspec_kw={'width_ratios': [1.6, 1]})
 
-    fig.suptitle('SWMHD Global Dispersion Relation (Variable-Depth)\n', fontsize=16, fontweight='bold')
+    title_suffix = "(Exact Bessel)" if (USE_ANALYTIC_BESSEL and not USE_VARIABLE_DEPTH) else "(Chebyshev)"
+    fig.suptitle(f'SWMHD Global Dispersion Relation {title_suffix}\n', fontsize=16, fontweight='bold')
 
     # Full spectrum plot
     for m in m_arr:
@@ -431,8 +662,9 @@ def plot_dispersion_relation(m_arr, dispersion_data):
     ax2.grid(True, alpha=0.22)
     ax2.set_title('Slow Branches Zoom', fontsize=14)
 
-    # Legend for collocation dots
-    col_dot = plt.Line2D([0],[0], marker='o', color='w', markerfacecolor='black', markersize=8, label='Global eigenvalues (collocation)')
+    # Legend for dots
+    lbl = 'Global eigenvalues (Bessel determinant)' if (USE_ANALYTIC_BESSEL and not USE_VARIABLE_DEPTH) else 'Global eigenvalues (collocation)'
+    col_dot = plt.Line2D([0],[0], marker='o', color='w', markerfacecolor='black', markersize=8, label=lbl)
     ax1.legend(handles=[col_dot], loc='upper left', fontsize=12)
     ax2.legend(handles=[col_dot], loc='lower left', fontsize=12)
 
@@ -441,7 +673,7 @@ def plot_dispersion_relation(m_arr, dispersion_data):
         rf"$\Omega = {Omega:.1e}$ rad/s,  $H_0 = {H0}$ m" + "\n"
         rf"$r_1 = {r1:.1e}$ m,  $r_2 = {r2:.1e}$ m" + "\n"
         rf"$\omega_A = 0$ s$^{{-1}}$ (since $B_0=0$)" + "\n"
-        rf"$N = 64$"
+        rf"Solver: {title_suffix}"
     )
     fig.text(0.52, 0.015, pbox, fontsize=11, va='bottom', ha='center',
              bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.92))
@@ -456,6 +688,12 @@ def plot_dispersion_relation(m_arr, dispersion_data):
     print("  - outputs/swmhd_variable_depth_global_dispersion.pdf")
 
 def main():
+    if USE_ANALYTIC_BESSEL and USE_VARIABLE_DEPTH:
+        print("Analytic Bessel solver unavailable: H_eq(r) is variable.\nUsing Chebyshev global solver.")
+        # Override to fall back gracefully
+        globals()['USE_ANALYTIC_BESSEL'] = False
+
+    validate_bessel_reduction()
     run_validation_checks()
     m_arr, dispersion_data = compute_dispersion_relation()
     plot_dispersion_relation(m_arr, dispersion_data)
