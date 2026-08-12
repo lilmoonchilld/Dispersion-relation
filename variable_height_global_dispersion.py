@@ -587,15 +587,48 @@ def compute_dispersion_relation():
         print("Equilibrium depth: CONSTANT")
         print("Radial equation: BESSEL")
         print("Eigenvalue method: Bessel boundary determinant")
-        for m in m_arr:
-            eigs = find_bessel_eigenvalues(m, omega_range=(-50 * f, 50 * f))
-            dispersion_data[m] = eigs
-            pos = sorted([e for e in eigs if e > 0])
-            neg = sorted([e for e in eigs if e < 0], reverse=True)
-            if m <= 3 or m % 5 == 0:
-                print(f"  m={m:2d} (found {len(eigs)} roots via Bessel): "
-                      f"+{[f'{x/f:.3f}' for x in pos[:4]]}... "
-                      f"-{[f'{abs(x)/f:.3f}' for x in neg[:4]]}...")
+
+        # Dense k-grid of horizontal/azimuthal wavenumber parameter
+        k_arr = np.linspace(1.0, 30.0, 300)
+
+        pos_branches = {} # n -> list of (k, omega)
+        neg_branches = {} # n -> list of (k, omega)
+
+        print("Computing continuous Bessel branches over dense k-grid...")
+        for j, k_val in enumerate(k_arr):
+            eigs = find_bessel_eigenvalues(k_val, omega_range=(-50 * f, 50 * f))
+            pos_eigs = sorted([e for e in eigs if e > 0])
+            neg_eigs = sorted([e for e in eigs if e < 0], reverse=True)
+
+            for n, val in enumerate(pos_eigs):
+                pos_branches.setdefault(n, []).append((k_val, val))
+            for n, val in enumerate(neg_eigs):
+                neg_branches.setdefault(n, []).append((k_val, val))
+
+            if (j + 1) % 50 == 0 or j == 0 or j == len(k_arr) - 1:
+                print(f"  Progress: {j+1}/{len(k_arr)} k-points solved.")
+
+        # Convert to lists of (n, k_pts, omega_pts)
+        pos_branches_list = []
+        for n in sorted(pos_branches.keys()):
+            pts = pos_branches[n]
+            k_pts = np.array([p[0] for p in pts])
+            omega_pts = np.array([p[1] for p in pts])
+            pos_branches_list.append((n, k_pts, omega_pts))
+
+        neg_branches_list = []
+        for n in sorted(neg_branches.keys()):
+            pts = neg_branches[n]
+            k_pts = np.array([p[0] for p in pts])
+            omega_pts = np.array([p[1] for p in pts])
+            neg_branches_list.append((n, k_pts, omega_pts))
+
+        dispersion_data = {
+            'pos_branches': pos_branches_list,
+            'neg_branches': neg_branches_list
+        }
+
+        return k_arr, dispersion_data
     else:
         if not USE_VARIABLE_DEPTH:
             print("Solver mode: CHEBYSHEV GLOBAL")
@@ -623,50 +656,93 @@ def compute_dispersion_relation():
 # =============================================================================
 # 10. Plotting
 # =============================================================================
-def plot_dispersion_relation(m_arr, dispersion_data):
+def plot_dispersion_relation(x_arr, dispersion_data):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7), gridspec_kw={'width_ratios': [1.6, 1]})
 
     title_suffix = "(Exact Bessel)" if (USE_ANALYTIC_BESSEL and not USE_VARIABLE_DEPTH) else "(Chebyshev)"
     fig.suptitle(f'SWMHD Global Dispersion Relation {title_suffix}\n', fontsize=16, fontweight='bold')
 
-    # Full spectrum plot
-    for m in m_arr:
-        eigs = dispersion_data[m]
-        # Plot positive and negative frequencies as scatter points
-        ax1.scatter([m] * len(eigs), eigs / f, color='black', marker='o', s=30, alpha=0.85, zorder=5)
+    if USE_ANALYTIC_BESSEL and not USE_VARIABLE_DEPTH:
+        # Plot continuous Bessel branches
+        pos_branches = dispersion_data['pos_branches']
+        neg_branches = dispersion_data['neg_branches']
 
-    ax1.axhline(0, color='grey', lw=0.8, ls=':')
-    ax1.axhline(+1, color='grey', lw=0.9, ls='--', alpha=0.5)
-    ax1.axhline(-1, color='grey', lw=0.9, ls='--', alpha=0.5)
+        # Full spectrum plot
+        for n, k_pts, omega_pts in pos_branches:
+            color = 'blue' if n == 0 else 'red'
+            lbl = 'Kelvin' if n == 0 else ('Poincare' if n == 1 else None)
+            ax1.plot(k_pts, omega_pts / f, color=color, lw=2.5, label=lbl, zorder=5)
+            ax2.plot(k_pts, omega_pts / f, color=color, lw=2.5, label=lbl, zorder=5)
 
-    ax1.set_xlabel('Azimuthal wavenumber $m$', fontsize=15)
-    ax1.set_ylabel(r'Normalised frequency $\hat\omega = \omega/(2\Omega)$', fontsize=15)
-    ax1.set_xlim(0.5, len(m_arr) + 0.5)
-    ax1.set_ylim(-50.0, 50.0)
-    ax1.set_xticks(m_arr[::2])
-    ax1.grid(True, alpha=0.22)
-    ax1.set_title('Full Spectrum', fontsize=14)
+        for n, k_pts, omega_pts in neg_branches:
+            color = 'blue' if n == 0 else 'red'
+            ax1.plot(k_pts, omega_pts / f, color=color, lw=2.5, zorder=5)
+            ax2.plot(k_pts, omega_pts / f, color=color, lw=2.5, zorder=5)
 
-    # Slow branches zoom plot
-    for m in m_arr:
-        eigs = dispersion_data[m]
-        slow_eigs = eigs[np.abs(eigs / f) < 1.0]
-        ax2.scatter([m] * len(slow_eigs), slow_eigs / f, color='black', marker='o', s=45, alpha=0.85, zorder=5)
+        ax1.axhline(0, color='grey', lw=0.8, ls=':')
+        ax1.axhline(+1, color='grey', lw=0.9, ls='--', alpha=0.5)
+        ax1.axhline(-1, color='grey', lw=0.9, ls='--', alpha=0.5)
 
-    ax2.axhline(0, color='grey', lw=0.8, ls=':')
-    ax2.set_xlabel('Azimuthal wavenumber $m$', fontsize=15)
-    ax2.set_ylabel(r'Normalised frequency $\hat\omega = \omega/(2\Omega)$', fontsize=15)
-    ax2.set_xlim(0.5, len(m_arr) + 0.5)
-    ax2.set_ylim(-0.8, 0.2)
-    ax2.set_xticks(m_arr[::2])
-    ax2.grid(True, alpha=0.22)
-    ax2.set_title('Slow Branches Zoom', fontsize=14)
+        ax1.set_xlabel('Wavenumber $k$', fontsize=15)
+        ax1.set_ylabel(r'Normalised frequency $\hat\omega = \omega/(2\Omega)$', fontsize=15)
+        ax1.set_xlim(1.0, 30.0)
+        ax1.set_ylim(-50.0, 50.0)
+        ax1.grid(True, alpha=0.22)
+        ax1.set_title('Full Spectrum', fontsize=14)
 
-    # Legend for dots
-    lbl = 'Global eigenvalues (Bessel determinant)' if (USE_ANALYTIC_BESSEL and not USE_VARIABLE_DEPTH) else 'Global eigenvalues (collocation)'
-    col_dot = plt.Line2D([0],[0], marker='o', color='w', markerfacecolor='black', markersize=8, label=lbl)
-    ax1.legend(handles=[col_dot], loc='upper left', fontsize=12)
-    ax2.legend(handles=[col_dot], loc='lower left', fontsize=12)
+        ax2.axhline(0, color='grey', lw=0.8, ls=':')
+        ax2.set_xlabel('Wavenumber $k$', fontsize=15)
+        ax2.set_ylabel(r'Normalised frequency $\hat\omega = \omega/(2\Omega)$', fontsize=15)
+        ax2.set_xlim(1.0, 30.0)
+        ax2.set_ylim(-0.8, 0.2)
+        ax2.grid(True, alpha=0.22)
+        ax2.set_title('Slow Branches Zoom', fontsize=14)
+
+        # Deduplicate and create legends
+        handles1, labels1 = ax1.get_legend_handles_labels()
+        by_label1 = dict(zip(labels1, handles1))
+        ax1.legend(by_label1.values(), by_label1.keys(), loc='upper left', fontsize=12)
+
+        handles2, labels2 = ax2.get_legend_handles_labels()
+        by_label2 = dict(zip(labels2, handles2))
+        ax2.legend(by_label2.values(), by_label2.keys(), loc='lower left', fontsize=12)
+    else:
+        # Full spectrum plot (Chebyshev/Discrete cases)
+        for m in x_arr:
+            eigs = dispersion_data[m]
+            ax1.scatter([m] * len(eigs), eigs / f, color='black', marker='o', s=30, alpha=0.85, zorder=5)
+
+        ax1.axhline(0, color='grey', lw=0.8, ls=':')
+        ax1.axhline(+1, color='grey', lw=0.9, ls='--', alpha=0.5)
+        ax1.axhline(-1, color='grey', lw=0.9, ls='--', alpha=0.5)
+
+        ax1.set_xlabel('Azimuthal wavenumber $m$', fontsize=15)
+        ax1.set_ylabel(r'Normalised frequency $\hat\omega = \omega/(2\Omega)$', fontsize=15)
+        ax1.set_xlim(0.5, len(x_arr) + 0.5)
+        ax1.set_ylim(-50.0, 50.0)
+        ax1.set_xticks(x_arr[::2])
+        ax1.grid(True, alpha=0.22)
+        ax1.set_title('Full Spectrum', fontsize=14)
+
+        # Slow branches zoom plot
+        for m in x_arr:
+            eigs = dispersion_data[m]
+            slow_eigs = eigs[np.abs(eigs / f) < 1.0]
+            ax2.scatter([m] * len(slow_eigs), slow_eigs / f, color='black', marker='o', s=45, alpha=0.85, zorder=5)
+
+        ax2.axhline(0, color='grey', lw=0.8, ls=':')
+        ax2.set_xlabel('Azimuthal wavenumber $m$', fontsize=15)
+        ax2.set_ylabel(r'Normalised frequency $\hat\omega = \omega/(2\Omega)$', fontsize=15)
+        ax2.set_xlim(0.5, len(x_arr) + 0.5)
+        ax2.set_ylim(-0.8, 0.2)
+        ax2.set_xticks(x_arr[::2])
+        ax2.grid(True, alpha=0.22)
+        ax2.set_title('Slow Branches Zoom', fontsize=14)
+
+        # Legend for dots
+        col_dot = plt.Line2D([0],[0], marker='o', color='w', markerfacecolor='black', markersize=8, label='Global eigenvalues (collocation)')
+        ax1.legend(handles=[col_dot], loc='upper left', fontsize=12)
+        ax2.legend(handles=[col_dot], loc='lower left', fontsize=12)
 
     # Parameter box
     pbox = (
