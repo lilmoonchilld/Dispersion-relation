@@ -2,7 +2,13 @@
 Variable-Height SWMHD Global Dispersion Solver
 ===============================================
 Solves the global eigenvalue problem for linearized variable-depth SWMHD in physical coordinates (SI units).
-Supports an exact analytical Bessel solver for the constant-depth special case.
+Supports:
+  - Exact analytical Bessel solver for the constant-depth special case.
+  - Chebyshev global collocation solver for general variable-depth.
+  - WKB-based branch prediction & global one-to-one matching layer for:
+    * Magneto-Poincaré (blue)
+    * Rossby (red)
+    * Magnetostrophic (orange)
 """
 
 import os
@@ -42,7 +48,7 @@ MU0   = 4.0 * np.pi * 1e-7  # Magnetic permeability [H/m]
 Omega = 0.5e-4        # Rotation rate [rad/s]
 H0    = 500.0         # Reference depth [m]
 g     = 9.81          # Gravitational acceleration [m/s^2]
-B0    = 0.0           # External vertical magnetic field [T]
+B0    = 0.0           # External vertical magnetic field [T] (set to B0 > 0.0 to enable magnetic branches)
 rho0  = 1000.0        # Density [kg/m^3]
 C     = 0.0           # Radial gravity constant [m^3/s^2]
 
@@ -55,6 +61,8 @@ f     = 2.0 * Omega   # Coriolis parameter [rad/s]
 # Validation switches
 USE_VARIABLE_DEPTH = True
 USE_ANALYTIC_BESSEL = False  # Set to False by default
+
+N_WKB = 8             # Number of radial modes to predict/match
 
 # =============================================================================
 # 1. Equilibrium Depth
@@ -281,7 +289,6 @@ def bessel_boundary_determinant(omega, m):
 
     if is_oscillatory:
         # Oscillatory case: use J_m, Y_m
-        # B_b[J] = ws * k * J_m'(k*r_b) - (m * f / r_b) * J_m(k*r_b)
         B1_J = ws * arg * jvp(m, arg * r1) - (m * f / r1) * jv(m, arg * r1)
         B1_Y = ws * arg * yvp(m, arg * r1) - (m * f / r1) * yv(m, arg * r1)
         B2_J = ws * arg * jvp(m, arg * r2) - (m * f / r2) * jv(m, arg * r2)
@@ -290,7 +297,6 @@ def bessel_boundary_determinant(omega, m):
         return B1_J * B2_Y - B1_Y * B2_J
     else:
         # Evanescent case: use I_m, K_m
-        # B_b[I] = ws * q * I_m'(q*r_b) - (m * f / r_b) * I_m(q*r_b)
         B1_I = ws * arg * ivp(m, arg * r1) - (m * f / r1) * iv(m, arg * r1)
         B1_K = ws * arg * kvp(m, arg * r1) - (m * f / r1) * kv(m, arg * r1)
         B2_I = ws * arg * ivp(m, arg * r2) - (m * f / r2) * iv(m, arg * r2)
@@ -343,7 +349,6 @@ def get_bessel_eigenfunction(omega, m, r_grid):
     arg = np.sqrt(val)
 
     if is_oscillatory:
-        # B1_J, B1_Y at r1
         B1_J = ws * arg * jvp(m, arg * r1) - (m * f / r1) * jv(m, arg * r1)
         B1_Y = ws * arg * yvp(m, arg * r1) - (m * f / r1) * yv(m, arg * r1)
 
@@ -354,7 +359,6 @@ def get_bessel_eigenfunction(omega, m, r_grid):
 
         eta = A * jv(m, arg * r_grid) + B * yv(m, arg * r_grid)
     else:
-        # B1_I, B1_K at r1
         B1_I = ws * arg * ivp(m, arg * r1) - (m * f / r1) * iv(m, arg * r1)
         B1_K = ws * arg * kvp(m, arg * r1) - (m * f / r1) * kv(m, arg * r1)
 
@@ -396,7 +400,7 @@ def validate_bessel_reduction():
     C1_expected = g * H0 * ws / (r_grid * (ws**2 - f**2))
     C0_expected = w_sample - (1**2 * g * H0 * ws) / (r_grid**2 * (ws**2 - f**2))
 
-    # Divided coefficients (coefficients of the normalized equation: eta'' + C1/C2 eta' + C0/C2 eta = 0)
+    # Divided coefficients
     C1_over_C2 = C1 / C2
     C0_over_C2 = C0 / C2
 
@@ -419,6 +423,132 @@ def validate_bessel_reduction():
     # Restore state
     globals()['USE_VARIABLE_DEPTH'] = prev_vdepth
     print("==========================================================\n")
+
+# =============================================================================
+# WKB LOCAL DISPERSION / BRANCH PREDICTION
+# =============================================================================
+def get_wkb_predictions(m, n, r=r0):
+    """
+    Computes analytical WKB branch predictions for a given m and radial order n
+    using the master WKB polynomial evaluated at representative radius r.
+    """
+    Heq = H_eq(r)
+    Q_val = Omega**2 * r - C / (r**2)
+
+    kr_n = n * np.pi / (r2 - r1)
+    kappa2_n = kr_n**2 + m**2 / r**2
+
+    K_n = g * Heq * kappa2_n
+    om_A2 = omega_A2(r)
+
+    # Poincaré / MS quadratic: y^2 + (2*omA2 - f^2 - K_n)*y + omA2*(omA2 - K_n) = 0
+    coeff_b = 2.0 * om_A2 - f**2 - K_n
+    coeff_c = om_A2 * (om_A2 - K_n)
+
+    disc = coeff_b**2 - 4.0 * coeff_c
+    if disc < 0.0:
+        disc = 0.0
+
+    y_plus = (-coeff_b + np.sqrt(disc)) / 2.0
+    y_minus = (-coeff_b - np.sqrt(disc)) / 2.0
+
+    # Poincaré
+    w_mp_p = np.sqrt(max(y_plus, 0.0))
+    w_mp_m = -w_mp_p
+
+    # Rossby
+    w_r = m * f * Q_val / (r * (f**2 + K_n))
+
+    # Magnetostrophic
+    if B0 > 0.0:
+        w_ms_p = np.sqrt(max(y_minus, 0.0))
+        w_ms_m = -w_ms_p
+    else:
+        w_ms_p = np.nan
+        w_ms_m = np.nan
+
+    return w_mp_p, w_mp_m, w_r, w_ms_p, w_ms_m
+
+# =============================================================================
+# WKB BRANCH ASSIGNMENT
+# =============================================================================
+def assign_branches_global(eigs, m_val, N_WKB=8):
+    """
+    Assigns numerical eigenvalues to WKB branches and radial modes (n)
+    using a global one-to-one minimum-distance matching strategy.
+    """
+    wkb_preds = {} # (branch_type, n) -> frequency
+    for n in range(1, N_WKB + 1):
+        w_mp_p, w_mp_m, w_r, w_ms_p, w_ms_m = get_wkb_predictions(m_val, n)
+        wkb_preds[('MP+', n)] = w_mp_p
+        wkb_preds[('MP-', n)] = w_mp_m
+        wkb_preds[('R', n)] = w_r
+        if B0 > 0.0:
+            wkb_preds[('MS+', n)] = w_ms_p
+            wkb_preds[('MS-', n)] = w_ms_m
+
+    # Collect all physically allowed pairings
+    allowed_matches = []
+    for j, w_eig in enumerate(eigs):
+        for (b_type, n), w_pred in wkb_preds.items():
+            if np.isnan(w_pred):
+                continue
+            # Sign constraints
+            if b_type in ['MP+', 'MS+'] and w_eig <= 0:
+                continue
+            if b_type in ['MP-', 'MS-'] and w_eig >= 0:
+                continue
+
+            dist = np.abs(w_eig - w_pred)
+            allowed_matches.append((dist, j, (b_type, n)))
+
+    # Sort matches by absolute distance
+    allowed_matches.sort(key=lambda x: x[0])
+
+    # Greedily build matching
+    matched_eigs = {} # j -> (branch_type, n, pred_w, error)
+    matched_branches = set()
+    assigned_eig_indices = set()
+
+    for dist, j, b_id in allowed_matches:
+        if j not in assigned_eig_indices and b_id not in matched_branches:
+            matched_eigs[j] = (b_id[0], b_id[1], wkb_preds[b_id], dist)
+            matched_branches.add(b_id)
+            assigned_eig_indices.add(j)
+
+    return matched_eigs
+
+# =============================================================================
+# GLOBAL SPECTRUM + WKB BRANCH DATA (Test 17 Optional phase integral)
+# =============================================================================
+def evaluate_phase_integral(omega, m):
+    """
+    Optionally evaluates the WKB phase integral of the wave normal mode
+    to verify consistency against n * pi quantization.
+    """
+    r_pts = np.linspace(r1, r2, 200)
+    dr = r_pts[1] - r_pts[0]
+
+    k2_vals = []
+    for r in r_pts:
+        Heq = H_eq(r)
+        Q_val = Omega**2 * r - C / (r**2)
+        om_A2 = omega_A2(r)
+        ws = omega_star(omega, r)
+
+        W1 = omega * (ws**2 - f**2) / (g * Heq * ws)
+        W2 = m * f * Q_val / (r * g * Heq * ws)
+        W3 = 4.0 * m * f * om_A2 * Q_val / (r * g * Heq * (ws**2 - f**2)) if B0 > 0.0 else 0.0
+
+        k2 = W1 + W2 + W3 - m**2 / (r**2)
+        k2_vals.append(k2)
+
+    k2_vals = np.array(k2_vals)
+    k_vals = np.zeros_like(k2_vals)
+    k_vals[k2_vals > 0] = np.sqrt(k2_vals[k2_vals > 0])
+
+    theta = np.sum(k_vals) * dr
+    return theta
 
 # =============================================================================
 # 11. Validation and Numerical Tests (Printed to Terminal)
@@ -460,7 +590,6 @@ def run_validation_checks():
     roots = find_eigenvalues(1, N_sample, r_grid, D1_mat, D2_mat)
 
     if len(roots) > 0:
-        # Choose a fast mode to verify
         idx_test = -1 # Largest positive eigenvalue
         w_test = roots[idx_test]
         eta = get_eigenfunction(w_test, 1, N_sample, r_grid, D1_mat, D2_mat)
@@ -477,7 +606,6 @@ def run_validation_checks():
         C2, C1, C0 = radial_coefficients(w_test, 1, r_grid)
         # Check interior points (indices 1 to N_sample-2)
         ode_res = C2 * (D2_mat @ eta) + C1 * (D1_mat @ eta) + C0 * eta
-        # L2 norm of residual at interior points
         interior_res = ode_res[1:-1]
         l2_res = np.sqrt(np.sum(np.abs(interior_res)**2) / (N_sample - 2))
         print(f"Test E [ODE Residual]: L2 norm of interior ODE residual = {l2_res:.6e}")
@@ -513,7 +641,6 @@ def run_validation_checks():
         print(f"  N = {N_res:2d}: found {len(rts)} real eigenfrequencies.")
 
     print("\nConvergence table for selected large-scale physical wave modes (hat_omega):")
-    # We select reference roots (N=80) that correspond to the main physical gravity-inertial modes (e.g. magnitude > 3*f)
     ref_roots_phys = sorted([r for r in results_conv[80] if np.abs(r) > 3.0 * f], key=lambda x: np.abs(x))
     print(f"{'N':>4} | " + " | ".join(f"Mode {i+1}" for i in range(min(5, len(ref_roots_phys)))))
     print("-" * 75)
@@ -525,7 +652,6 @@ def run_validation_checks():
             if len(rts) > 0:
                 best_idx = np.argmin(np.abs(rts - ref_rt))
                 best_rt = rts[best_idx]
-                # Check distance
                 dist = np.abs(best_rt - ref_rt) / f
                 if dist < 0.05:
                     row_str += f" {best_rt/f:+.6f} |"
@@ -540,12 +666,10 @@ def run_validation_checks():
     print("==========================================================")
     print("    TEST 10: DIRECT NUMERICAL VS BESSEL VALIDATION        ")
     print("==========================================================")
-    # Temporarily set constant depth and Bessel active
     prev_vdepth = USE_VARIABLE_DEPTH
     globals()['USE_VARIABLE_DEPTH'] = False
 
     rg, d1, d2 = chebyshev_lobatto(64, r1, r2)
-    # Calculate frequencies using both methods
     cheb_rts = find_eigenvalues(1, 64, rg, d1, d2)
     bessel_rts = find_bessel_eigenvalues(1)
 
@@ -561,7 +685,6 @@ def run_validation_checks():
                 matched_count += 1
                 print(f"{matched_count:4d} | {rt_c/f:+18.6f} | {rt_b/f:+15.6f} | {diff:.6e}")
 
-    # Restore variable depth switch
     globals()['USE_VARIABLE_DEPTH'] = prev_vdepth
     print("==========================================================\n")
 
@@ -641,26 +764,51 @@ def compute_dispersion_relation():
             print("Radial equation: GENERAL VARIABLE-COEFFICIENT ODE")
             print("Eigenvalue method: Global collocation")
 
+        # Store structured classifications
+        branch_assignments = {
+            'MP+': {}, 'MP-': {}, 'R': {}, 'MS+': {}, 'MS-': {}, 'unassigned': []
+        }
+
         for m in m_arr:
             eigs = find_eigenvalues(m, N_col, r_grid, D1_mat, D2_mat, omega_range=(-50 * f, 50 * f))
-            dispersion_data[m] = eigs
-            pos = sorted([e for e in eigs if e > 0])
-            neg = sorted([e for e in eigs if e < 0], reverse=True)
-            if m <= 3 or m % 5 == 0:
-                print(f"  m={m:2d} (found {len(eigs)} roots via Chebyshev): "
-                      f"+{[f'{x/f:.3f}' for x in pos[:4]]}... "
-                      f"-{[f'{abs(x)/f:.3f}' for x in neg[:4]]}...")
 
-    return m_arr, dispersion_data
+            # WKB local branch matching
+            matches = assign_branches_global(eigs, m, N_WKB)
+
+            print(f"  m={m:2d} (found {len(eigs)} roots via Chebyshev):")
+            for j, w_eig in enumerate(eigs):
+                if j in matches:
+                    b_type, n, w_wkb, err = matches[j]
+                    branch_assignments[b_type].setdefault(n, []).append((m, w_eig, w_wkb, err))
+
+                    # Optional Test 17: Phase integral verification
+                    theta = evaluate_phase_integral(w_eig, m)
+                    phase_err = np.abs(theta - n * np.pi) / (n * np.pi)
+
+                    print(f"    Assigned: {b_type} n={n} -> omega_hat = {w_eig/f:+.4f} (WKB = {w_wkb/f:+.4f}, Err = {err/f:.4f}, Phase Err = {phase_err:.2%})")
+                else:
+                    branch_assignments['unassigned'].append((m, w_eig))
+                    print(f"    Unassigned: omega_hat = {w_eig/f:+.4f}")
+            print()
+
+        return m_arr, branch_assignments
 
 # =============================================================================
-# 10. Plotting
+# PUBLICATION-QUALITY DISPERSION PLOT
 # =============================================================================
 def plot_dispersion_relation(x_arr, dispersion_data):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7), gridspec_kw={'width_ratios': [1.6, 1]})
 
     title_suffix = "(Exact Bessel)" if (USE_ANALYTIC_BESSEL and not USE_VARIABLE_DEPTH) else "(Chebyshev)"
     fig.suptitle(f'SWMHD Global Dispersion Relation {title_suffix}\n', fontsize=16, fontweight='bold')
+
+    COLORS = {
+        'MP':  '#1f77b4', # blue
+        'MK':  '#2ca02c', # green
+        'R':   '#d62728', # red
+        'MS':  '#ff7f0e', # orange
+        'unassigned': 'gray'
+    }
 
     if USE_ANALYTIC_BESSEL and not USE_VARIABLE_DEPTH:
         # Plot continuous Bessel branches
@@ -707,10 +855,75 @@ def plot_dispersion_relation(x_arr, dispersion_data):
         by_label2 = dict(zip(labels2, handles2))
         ax2.legend(by_label2.values(), by_label2.keys(), loc='lower left', fontsize=12)
     else:
-        # Full spectrum plot (Chebyshev/Discrete cases)
-        for m in x_arr:
-            eigs = dispersion_data[m]
-            ax1.scatter([m] * len(eigs), eigs / f, color='black', marker='o', s=30, alpha=0.85, zorder=5)
+        # Plot Chebyshev and WKB curves
+        m_fine = np.linspace(1.0, 30.0, 400)
+
+        # Plot continuous WKB predictions
+        for n in range(1, N_WKB + 1):
+            alpha_val = max(0.1, 0.4 - 0.05 * (n - 1))
+
+            # WKB branches
+            w_mp_p_list = []
+            w_mp_m_list = []
+            w_r_list = []
+            w_ms_p_list = []
+            w_ms_m_list = []
+
+            for m in m_fine:
+                w_mp_p, w_mp_m, w_r, w_ms_p, w_ms_m = get_wkb_predictions(m, n)
+                w_mp_p_list.append(w_mp_p)
+                w_mp_m_list.append(w_mp_m)
+                w_r_list.append(w_r)
+                w_ms_p_list.append(w_ms_p)
+                w_ms_m_list.append(w_ms_m)
+
+            w_mp_p_list = np.array(w_mp_p_list) / f
+            w_mp_m_list = np.array(w_mp_m_list) / f
+            w_r_list = np.array(w_r_list) / f
+            w_ms_p_list = np.array(w_ms_p_list) / f
+            w_ms_m_list = np.array(w_ms_m_list) / f
+
+            lbl_mp = f'Magneto-Poincaré n={n}' if n <= 2 else None
+            lbl_r = f'Rossby n={n}' if n <= 2 else None
+            lbl_ms = f'Magnetostrophic n={n}' if (n <= 2 and B0 > 0.0) else None
+
+            # Plot WKB MP
+            ax1.plot(m_fine, w_mp_p_list, color=COLORS['MP'], lw=1.5, alpha=alpha_val, label=lbl_mp)
+            ax1.plot(m_fine, w_mp_m_list, color=COLORS['MP'], lw=1.5, alpha=alpha_val)
+
+            # Plot WKB Rossby
+            ax1.plot(m_fine, w_r_list, color=COLORS['R'], lw=1.5, alpha=alpha_val, label=lbl_r)
+            ax2.plot(m_fine, w_r_list, color=COLORS['R'], lw=1.5, alpha=alpha_val, label=lbl_r)
+
+            # Plot WKB MS (if magnetic field is present)
+            if B0 > 0.0:
+                ax1.plot(m_fine, w_ms_p_list, color=COLORS['MS'], lw=1.5, alpha=alpha_val, label=lbl_ms)
+                ax1.plot(m_fine, w_ms_m_list, color=COLORS['MS'], lw=1.5, alpha=alpha_val)
+                ax2.plot(m_fine, w_ms_p_list, color=COLORS['MS'], lw=1.5, alpha=alpha_val, label=lbl_ms)
+                ax2.plot(m_fine, w_ms_m_list, color=COLORS['MS'], lw=1.5, alpha=alpha_val)
+
+        # Plot assigned global eigenvalues as colored scatter points
+        for b_type in ['MP+', 'MP-', 'R', 'MS+', 'MS-']:
+            color_key = 'MP' if 'MP' in b_type else ('R' if b_type == 'R' else 'MS')
+            for n in sorted(dispersion_data[b_type].keys()):
+                pts = dispersion_data[b_type][n]
+                if len(pts) == 0:
+                    continue
+                m_vals = [p[0] for p in pts]
+                w_vals = [p[1] / f for p in pts]
+                lbl = f'Global {color_key}' if n == 1 else None
+
+                ax1.scatter(m_vals, w_vals, color=COLORS[color_key], marker='o', s=30, alpha=0.85, zorder=5, label=lbl)
+                if 'MP' not in b_type:
+                    ax2.scatter(m_vals, w_vals, color=COLORS[color_key], marker='o', s=45, alpha=0.85, zorder=5, label=lbl)
+
+        # Plot unassigned eigenvalues as neutral scatter dots
+        unassigned_pts = dispersion_data['unassigned']
+        if len(unassigned_pts) > 0:
+            m_un = [p[0] for p in unassigned_pts]
+            w_un = [p[1] / f for p in unassigned_pts]
+            ax1.scatter(m_un, w_un, color=COLORS['unassigned'], marker='x', s=20, alpha=0.5, zorder=4, label='Unassigned')
+            ax2.scatter(m_un, w_un, color=COLORS['unassigned'], marker='x', s=25, alpha=0.5, zorder=4, label='Unassigned')
 
         ax1.axhline(0, color='grey', lw=0.8, ls=':')
         ax1.axhline(+1, color='grey', lw=0.9, ls='--', alpha=0.5)
@@ -724,12 +937,6 @@ def plot_dispersion_relation(x_arr, dispersion_data):
         ax1.grid(True, alpha=0.22)
         ax1.set_title('Full Spectrum', fontsize=14)
 
-        # Slow branches zoom plot
-        for m in x_arr:
-            eigs = dispersion_data[m]
-            slow_eigs = eigs[np.abs(eigs / f) < 1.0]
-            ax2.scatter([m] * len(slow_eigs), slow_eigs / f, color='black', marker='o', s=45, alpha=0.85, zorder=5)
-
         ax2.axhline(0, color='grey', lw=0.8, ls=':')
         ax2.set_xlabel('Azimuthal wavenumber $m$', fontsize=15)
         ax2.set_ylabel(r'Normalised frequency $\hat\omega = \omega/(2\Omega)$', fontsize=15)
@@ -739,23 +946,54 @@ def plot_dispersion_relation(x_arr, dispersion_data):
         ax2.grid(True, alpha=0.22)
         ax2.set_title('Slow Branches Zoom', fontsize=14)
 
-        # Legend for dots
-        col_dot = plt.Line2D([0],[0], marker='o', color='w', markerfacecolor='black', markersize=8, label='Global eigenvalues (collocation)')
-        ax1.legend(handles=[col_dot], loc='upper left', fontsize=12)
-        ax2.legend(handles=[col_dot], loc='lower left', fontsize=12)
+        # Figure legends
+        handles1, labels1 = ax1.get_legend_handles_labels()
+        by_label1 = dict(zip(labels1, handles1))
+        ax1.legend(by_label1.values(), by_label1.keys(), loc='upper left', fontsize=10, framealpha=0.9)
+
+        handles2, labels2 = ax2.get_legend_handles_labels()
+        by_label2 = dict(zip(labels2, handles2))
+        ax2.legend(by_label2.values(), by_label2.keys(), loc='lower left', fontsize=10, framealpha=0.9)
+
+    # Figure wide legend placed outside the right panel
+    handles1, labels1 = ax1.get_legend_handles_labels()
+    handles2, labels2 = ax2.get_legend_handles_labels()
+    all_handles = handles1 + handles2
+    all_labels = labels1 + labels2
+
+    seen = set()
+    legend_handles = []
+    legend_labels = []
+    for h, l in zip(all_handles, all_labels):
+        if l not in seen:
+            seen.add(l)
+            legend_handles.append(h)
+            legend_labels.append(l)
+
+    fig.legend(
+        legend_handles,
+        legend_labels,
+        loc='center left',
+        bbox_to_anchor=(1.02, 0.5),
+        fontsize=13,
+        frameon=True,
+        borderaxespad=0.5,
+        labelspacing=0.8,
+        handlelength=2.2
+    )
 
     # Parameter box
     pbox = (
         rf"$\Omega = {Omega:.1e}$ rad/s,  $H_0 = {H0}$ m" + "\n"
         rf"$r_1 = {r1:.1e}$ m,  $r_2 = {r2:.1e}$ m" + "\n"
-        rf"$\omega_A = 0$ s$^{{-1}}$ (since $B_0=0$)" + "\n"
+        rf"$\omega_A(r_0) = {np.sqrt(omega_A2(r0)):.2e}$ s$^{{-1}}$" + "\n"
         rf"Solver: {title_suffix}"
     )
     fig.text(0.52, 0.015, pbox, fontsize=11, va='bottom', ha='center',
              bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.92))
 
-    fig.subplots_adjust(bottom=0.15)
-    plt.tight_layout(rect=[0, 0.12, 1, 0.95])
+    fig.subplots_adjust(bottom=0.15, right=0.78)
+    plt.tight_layout(rect=[0, 0.12, 0.78, 0.95])
 
     plt.savefig("outputs/swmhd_variable_depth_global_dispersion.png", dpi=180, bbox_inches='tight')
     plt.savefig("outputs/swmhd_variable_depth_global_dispersion.pdf", dpi=180, bbox_inches='tight')
@@ -763,16 +1001,99 @@ def plot_dispersion_relation(x_arr, dispersion_data):
     print("  - outputs/swmhd_variable_depth_global_dispersion.png")
     print("  - outputs/swmhd_variable_depth_global_dispersion.pdf")
 
+    # Save separate versions of panels and legend as requested
+    fig_left, ax_l = plt.subplots(figsize=(8, 6))
+    if USE_ANALYTIC_BESSEL and not USE_VARIABLE_DEPTH:
+        # Plot continuous Bessel branches
+        pos_branches = dispersion_data['pos_branches']
+        neg_branches = dispersion_data['neg_branches']
+        for n, k_pts, omega_pts in pos_branches:
+            color = 'blue' if n == 0 else 'red'
+            ax_l.plot(k_pts, omega_pts / f, color=color, lw=2.5)
+        for n, k_pts, omega_pts in neg_branches:
+            color = 'blue' if n == 0 else 'red'
+            ax_l.plot(k_pts, omega_pts / f, color=color, lw=2.5)
+        ax_l.set_xlabel('Wavenumber $k$')
+        ax_l.set_xlim(1.0, 30.0)
+    else:
+        # Plot scatter
+        for b_type in ['MP+', 'MP-', 'R', 'MS+', 'MS-']:
+            color_key = 'MP' if 'MP' in b_type else ('R' if b_type == 'R' else 'MS')
+            for n in sorted(dispersion_data[b_type].keys()):
+                pts = dispersion_data[b_type][n]
+                if len(pts) == 0:
+                    continue
+                m_vals = [p[0] for p in pts]
+                w_vals = [p[1] / f for p in pts]
+                ax_l.scatter(m_vals, w_vals, color=COLORS[color_key], marker='o', s=30, alpha=0.85)
+        ax_l.set_xlabel('Azimuthal wavenumber $m$')
+        ax_l.set_xlim(0.5, len(x_arr) + 0.5)
+
+    ax_l.axhline(0, color='grey', lw=0.8, ls=':')
+    ax_l.set_ylabel(r'Normalised frequency $\hat\omega$')
+    ax_l.set_ylim(-50.0, 50.0)
+    ax_l.grid(True, alpha=0.22)
+    ax_l.set_title('Full Spectrum')
+    plt.tight_layout()
+    plt.savefig("outputs/FullSpectrum_variable_depth.png", dpi=300, bbox_inches='tight')
+    plt.close(fig_left)
+
+    fig_right, ax_r = plt.subplots(figsize=(6, 6))
+    if USE_ANALYTIC_BESSEL and not USE_VARIABLE_DEPTH:
+        pos_branches = dispersion_data['pos_branches']
+        neg_branches = dispersion_data['neg_branches']
+        for n, k_pts, omega_pts in pos_branches:
+            color = 'blue' if n == 0 else 'red'
+            ax_r.plot(k_pts, omega_pts / f, color=color, lw=2.5)
+        for n, k_pts, omega_pts in neg_branches:
+            color = 'blue' if n == 0 else 'red'
+            ax_r.plot(k_pts, omega_pts / f, color=color, lw=2.5)
+        ax_r.set_xlabel('Wavenumber $k$')
+        ax_r.set_xlim(1.0, 30.0)
+    else:
+        for b_type in ['R', 'MS+', 'MS-']:
+            color_key = 'R' if b_type == 'R' else 'MS'
+            for n in sorted(dispersion_data[b_type].keys()):
+                pts = dispersion_data[b_type][n]
+                if len(pts) == 0:
+                    continue
+                m_vals = [p[0] for p in pts]
+                w_vals = [p[1] / f for p in pts]
+                ax_r.scatter(m_vals, w_vals, color=COLORS[color_key], marker='o', s=45, alpha=0.85)
+        ax_r.set_xlabel('Azimuthal wavenumber $m$')
+        ax_r.set_xlim(0.5, len(x_arr) + 0.5)
+
+    ax_r.axhline(0, color='grey', lw=0.8, ls=':')
+    ax_r.set_ylabel(r'Normalised frequency $\hat\omega$')
+    ax_r.set_ylim(-0.8, 0.2)
+    ax_r.grid(True, alpha=0.22)
+    ax_r.set_title('Slow Branches Zoom')
+    plt.tight_layout()
+    plt.savefig("outputs/SlowSpectrum_variable_depth.png", dpi=300, bbox_inches='tight')
+    plt.close(fig_right)
+
+    fig_leg = plt.figure(figsize=(10, 2))
+    fig_leg.legend(
+        legend_handles,
+        legend_labels,
+        loc='center',
+        ncol=4,
+        fontsize=13,
+        frameon=True,
+    )
+    plt.tight_layout()
+    plt.savefig("outputs/Legend_variable_depth.png", dpi=300, bbox_inches='tight')
+    plt.close(fig_leg)
+
 def main():
     if USE_ANALYTIC_BESSEL and USE_VARIABLE_DEPTH:
         print("Analytic Bessel solver unavailable: H_eq(r) is variable.\nUsing Chebyshev global solver.")
-        # Override to fall back gracefully
         globals()['USE_ANALYTIC_BESSEL'] = False
 
     validate_bessel_reduction()
     run_validation_checks()
-    m_arr, dispersion_data = compute_dispersion_relation()
-    plot_dispersion_relation(m_arr, dispersion_data)
+    x_arr, dispersion_data = compute_dispersion_relation()
+    plot_dispersion_relation(x_arr, dispersion_data)
 
 if __name__ == "__main__":
     main()
