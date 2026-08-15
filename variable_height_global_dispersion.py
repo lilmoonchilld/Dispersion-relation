@@ -3,13 +3,15 @@ Variable-Height SWMHD Global Dispersion Solver
 ===============================================
 Solves the global eigenvalue problem for linearized variable-depth SWMHD in physical coordinates (SI units).
 Supports:
-  - Exact analytical Bessel solver for the constant-depth special case (fixed-integer m validation).
+  - Exact analytical Bessel solver for the constant-depth special case.
   - Chebyshev global collocation solver for general variable-depth.
   - Full eighth-order WKB polynomial branch tracking & optimal one-to-one matching layer for:
     * Magneto-Poincaré (blue)
     * Rossby (red)
     * Magnetostrophic (orange)
     * Magneto-Kelvin (green)
+  - Higher-accuracy global WKB phase-integral eigenvalue solver with Robin boundary phase conditions on psi(r)
+    derived from the Liouville transformation of the exact variable-depth radial ODE.
 """
 
 import os
@@ -49,7 +51,7 @@ MU0   = 4.0 * np.pi * 1e-7  # Magnetic permeability [H/m]
 Omega = 0.5e-4        # Rotation rate [rad/s]
 H0    = 500.0         # Reference depth [m]
 g     = 9.81          # Gravitational acceleration [m/s^2]
-B0    = 0.0           # External vertical magnetic field [T] (set to B0 > 0.0 to enable magnetic branches)
+B0    = 5e-4          # External vertical magnetic field [T] (set to B0 > 0.0 to enable magnetic branches)
 rho0  = 1000.0        # Density [kg/m^3]
 C     = 0.0           # Radial gravity constant [m^3/s^2]
 
@@ -64,7 +66,7 @@ USE_VARIABLE_DEPTH = True
 USE_ANALYTIC_BESSEL = False  # Set to False by default
 
 N_col = 64            # Number of Chebyshev collocation points
-N_WKB = 8             # Number of radial modes to predict/match
+N_WKB = 4             # Number of radial modes to predict/match
 
 # =============================================================================
 # 1. Equilibrium Depth
@@ -108,6 +110,13 @@ def chebyshev_lobatto(N, r_min, r_max):
     Constructs the dimensional Chebyshev grid on [r_min, r_max] (in meters),
     returning nodes, first derivative matrix D1 (1/m), and second derivative matrix D2 (1/m^2).
     """
+    if N <= 1:
+        # Avoid division by zero for N=1
+        r_grid = np.array([0.5 * (r_min + r_max)])
+        D1 = np.zeros((1, 1))
+        D2 = np.zeros((1, 1))
+        return r_grid, D1, D2
+
     j = np.arange(N)
     xi = np.cos(j * np.pi / (N - 1))
     c = np.ones(N)
@@ -163,11 +172,12 @@ def radial_coefficients(omega, m, r_grid):
 def build_matrix(omega, m, N, r_grid, D1_mat, D2_mat):
     # Protection against zero and resonance singularities
     omega_tol = 1e-12
-    resonance_tol = 1e-12
+    resonance_tol = 1e-4
 
     if np.abs(omega) < omega_tol:
         return None
 
+    # Scale-aware relative resonance check
     ws = omega_star(omega, r_grid)
     if np.any(np.abs(ws**2 - f**2) / (f**2 + 1e-14) < resonance_tol):
         return None
@@ -262,7 +272,6 @@ def find_eigenvalues(m_val, N, r_grid, D1_mat, D2_mat, omega_range=(-5e-3, 5e-3)
             continue
         if svs[i] < svs[i-1] and svs[i] < svs[i+1] and svs[i] < 1e-2:
             # Re-verify and polish if not already captured
-            # Use Brent sign-change scanning around the minimum with tight grid
             sub_scan = np.linspace(scan[i-1], scan[i+1], 20)
             sub_signs = []
             for w in sub_scan:
@@ -332,13 +341,13 @@ def bessel_boundary_determinant(omega, m):
     using ordinary J, Y or modified I, K Bessel functions.
     """
     omega_tol = 1e-12
-    resonance_tol = 1e-12
+    resonance_tol = 1e-4
 
     if np.abs(omega) < omega_tol:
         return np.nan
 
     ws = omega_star(omega, r0)
-    if np.abs(ws**2 - f**2) < resonance_tol:
+    if np.any(np.abs(ws**2 - f**2) / (f**2 + 1e-14) < resonance_tol):
         return np.nan
 
     val, is_oscillatory = bessel_radial_wavenumber(omega)
@@ -489,10 +498,10 @@ def full_wkb_real_roots(m, n, r=r0, B_field=None):
 
     return np.array(sorted(real_roots))
 
-def classify_wkb_roots_by_continuation(m, n, r=r0):
+def classify_wkb_roots_by_continuation(m, n, r=r0, B_target=None):
     """
     Tracks and classifies the roots of the full WKB polynomial
-    continuously from B0 = 0 to B0_target.
+    continuously from B0 = 0 to B_target (or B0).
     """
     Heq = H_eq(r)
     kr_n = n * np.pi / (r2 - r1)
@@ -506,13 +515,15 @@ def classify_wkb_roots_by_continuation(m, n, r=r0):
     w_mp_m_0 = -w_mp_p_0
 
     # Step B: Continuation over magnetic steps
-    N_steps = 6
-    B0_seq = np.linspace(0.0, B0, N_steps)
+    N_steps = 10
+    B_field_val = B0 if B_target is None else B_target
+    B0_seq = np.linspace(0.0, B_field_val, N_steps)
 
     curr_rossby = w_rossby_0
     curr_mp_p = w_mp_p_0
     curr_mp_m = w_mp_m_0
 
+    # Pre-calculated zero-field starting values for MS branches are 0.0
     curr_ms_p = 0.0
     curr_ms_m = 0.0
 
@@ -522,35 +533,61 @@ def classify_wkb_roots_by_continuation(m, n, r=r0):
         if len(roots) == 0:
             continue
 
-        # Match closest roots
-        idx_r = np.argmin(np.abs(roots - curr_rossby))
-        curr_rossby = roots[idx_r]
+        # Extract magnetic and fast waves
+        # For small b_val, Poincaré roots are close to w_mp_p and w_mp_m.
+        # Rossby root is close to curr_rossby.
+        # MS roots are the two remaining real roots closest to 0.0.
 
+        # Match Rossby first
+        idx_r = np.argmin(np.abs(roots - curr_rossby))
+        val_r = roots[idx_r]
+
+        # Match MP+ and MP-
         idx_mp_p = np.argmin(np.abs(roots - curr_mp_p))
-        curr_mp_p = roots[idx_mp_p]
+        val_mp_p = roots[idx_mp_p]
 
         idx_mp_m = np.argmin(np.abs(roots - curr_mp_m))
-        curr_mp_m = roots[idx_mp_m]
+        val_mp_m = roots[idx_mp_m]
 
-        if i == 1:
-            om_A2 = b_val**2 / (MU0 * rho0 * Heq**2)
-            coeff_b = 2.0 * om_A2 - f**2 - K_n
-            coeff_c = om_A2 * (om_A2 - K_n)
-            disc = coeff_b**2 - 4.0 * coeff_c
-            if disc < 0.0: disc = 0.0
-            y_minus = (-coeff_b - np.sqrt(disc)) / 2.0
-            pred_ms_p = np.sqrt(max(y_minus, 0.0))
+        # Remaining roots
+        used_indices = {idx_r, idx_mp_p, idx_mp_m}
+        remaining_roots = np.array([roots[k] for k in range(len(roots)) if k not in used_indices])
 
-            idx_ms_p = np.argmin(np.abs(roots - pred_ms_p))
-            curr_ms_p = roots[idx_ms_p]
-            curr_ms_m = -curr_ms_p
+        if len(remaining_roots) >= 2:
+            # We want to identify the MS+ and MS- roots
+            # One is positive, one is negative, and they are slow.
+            pos_rem = remaining_roots[remaining_roots > 0]
+            neg_rem = remaining_roots[remaining_roots < 0]
+
+            if len(pos_rem) > 0:
+                # The slow positive magnetostrophic is the smallest positive remaining root
+                val_ms_p = np.min(pos_rem)
+            else:
+                val_ms_p = curr_ms_p
+
+            if len(neg_rem) > 0:
+                # The slow negative magnetostrophic is the largest negative remaining root (closest to 0)
+                val_ms_m = np.max(neg_rem)
+            else:
+                val_ms_m = curr_ms_m
+        elif len(remaining_roots) == 1:
+            # Single root remaining
+            single_val = remaining_roots[0]
+            if single_val > 0:
+                val_ms_p = single_val
+                val_ms_m = curr_ms_m
+            else:
+                val_ms_p = curr_ms_p
+                val_ms_m = single_val
         else:
-            if B0 > 0.0:
-                idx_ms_p = np.argmin(np.abs(roots - curr_ms_p))
-                curr_ms_p = roots[idx_ms_p]
+            val_ms_p = curr_ms_p
+            val_ms_m = curr_ms_m
 
-                idx_ms_m = np.argmin(np.abs(roots - curr_ms_m))
-                curr_ms_m = roots[idx_ms_m]
+        curr_rossby = val_r
+        curr_mp_p = val_mp_p
+        curr_mp_m = val_mp_m
+        curr_ms_p = val_ms_p
+        curr_ms_m = val_ms_m
 
     if B0 == 0.0:
         curr_ms_p = np.nan
@@ -594,6 +631,150 @@ def get_kelvin_predictions(m):
     return w_mk_in, w_mk_out
 
 # =============================================================================
+# HIGH-ACCURACY GLOBAL WKB PHASE-INTEGRAL SOLVER
+# =============================================================================
+def radial_wkb_coefficients(omega, m, r_pts):
+    """
+    Returns exact scaled coefficients P and Q on a dense radial grid.
+    """
+    C2, C1, C0 = radial_coefficients(omega, m, r_pts)
+    P = C1 / C2
+    Q = C0 / C2
+    return P, Q
+
+def liouville_wavenumber_squared(omega, m, r_pts):
+    """
+    Computes the Liouville-transformed wavenumber squared K^2(r, omega) exactly.
+    Uses a standard resolution grid with CubicSpline interpolation to prevent O(N_pts^3) complexity.
+    """
+    N_base = 64
+    r_base, D1_base, _ = chebyshev_lobatto(N_base, r1, r2)
+    P, Q = radial_wkb_coefficients(omega, m, r_base)
+    P_prime = D1_base @ P
+    K2_base = Q - 0.5 * P_prime - 0.25 * P**2
+
+    from scipy.interpolate import CubicSpline
+    cs = CubicSpline(r_base, K2_base)
+    return cs(r_pts)
+
+def find_turning_points(omega, m, N_pts=400):
+    """
+    Detects and isolates precise locations where K^2(r, omega) = 0.
+    """
+    r_pts = np.linspace(r1, r2, N_pts)
+    K2 = liouville_wavenumber_squared(omega, m, r_pts)
+
+    tps = []
+    for i in range(len(r_pts) - 1):
+        if K2[i] * K2[i+1] < 0.0:
+            def K2_single(r):
+                rg = np.array([r_pts[i], r_pts[i+1]])
+                k2g = np.array([K2[i], K2[i+1]])
+                return np.interp(r, rg, k2g)
+            try:
+                rt = brentq(K2_single, r_pts[i], r_pts[i+1], xtol=1e-12)
+                tps.append(rt)
+            except Exception:
+                pass
+    return np.array(sorted(tps))
+
+def wkb_boundary_phase(omega, m, r_b, P_val):
+    """
+    Derives the Robin boundary phase conditions consistently
+    incorporating the Liouville amplitude correction.
+    """
+    ws = omega_star(omega, r_b)
+    h_b = 0.5 * P_val + (m * f) / (ws * r_b)
+
+    K2_val = liouville_wavenumber_squared(omega, m, np.array([r_b]))[0]
+    K_val = np.sqrt(max(K2_val, 0.0))
+
+    if r_b == r1:
+        phi = np.arctan2(K_val, h_b)
+    else:
+        phi = np.arctan2(K_val, -h_b)
+    return phi
+
+def wkb_phase_integral_global(omega, m, n, N_pts=400):
+    """
+    Calculates the global phase integral residual incorporating Robin boundary phases,
+    Airy turning-point corrections, and exact propagation regions.
+    """
+    r_pts = np.linspace(r1, r2, N_pts)
+    K2 = liouville_wavenumber_squared(omega, m, r_pts)
+    tps = find_turning_points(omega, m, N_pts)
+
+    dr = r_pts[1] - r_pts[0]
+
+    phase = 0.0
+    for i in range(len(r_pts) - 1):
+        if K2[i] > 0.0 and K2[i+1] > 0.0:
+            mid_k2 = 0.5 * (K2[i] + K2[i+1])
+            phase += np.sqrt(mid_k2) * dr
+
+    P_grid, _ = radial_wkb_coefficients(omega, m, np.array([r1, r2]))
+
+    phi1 = wkb_boundary_phase(omega, m, r1, P_grid[0]) if K2[0] > 0.0 else 0.0
+    phi2 = wkb_boundary_phase(omega, m, r2, P_grid[-1]) if K2[-1] > 0.0 else 0.0
+
+    num_tps = len(tps)
+    if num_tps == 0:
+        residual = phase - phi1 - phi2 - n * np.pi
+    elif num_tps == 1:
+        phi_bc = phi1 if K2[0] > 0.0 else phi2
+        residual = phase - phi_bc + 0.25 * np.pi - n * np.pi
+    else:
+        residual = phase + 0.5 * np.pi - n * np.pi
+
+    return residual
+
+def solve_global_wkb_frequency(m, n, branch_type, N_pts=400):
+    """
+    Solves for the high-accuracy global WKB frequency using scalar root finding
+    with adaptive brackets around the local WKB predictor.
+    """
+    w_mp_p, w_mp_m, w_r, w_ms_p, w_ms_m = classify_wkb_roots_by_continuation(m, n)
+
+    if 'MP+' in branch_type:
+        w_guess = w_mp_p
+    elif 'MP-' in branch_type:
+        w_guess = w_mp_m
+    elif 'R' in branch_type:
+        w_guess = w_r
+    elif 'MS+' in branch_type:
+        w_guess = w_ms_p
+    elif 'MS-' in branch_type:
+        w_guess = w_ms_m
+    else:
+        return np.nan
+
+    if np.isnan(w_guess):
+        return np.nan
+
+    delta = 0.05
+    for attempt in range(6):
+        w_left = w_guess * (1.0 - delta) if w_guess > 0.0 else w_guess * (1.0 + delta)
+        w_right = w_guess * (1.0 + delta) if w_guess > 0.0 else w_guess * (1.0 - delta)
+
+        if w_guess > 0.0:
+            w_left = max(w_left, 1e-12)
+        else:
+            w_right = min(w_right, -1e-12)
+
+        try:
+            res_left = wkb_phase_integral_global(w_left, m, n, N_pts)
+            res_right = wkb_phase_integral_global(w_right, m, n, N_pts)
+
+            if res_left * res_right < 0.0:
+                root_w = brentq(lambda w: wkb_phase_integral_global(w, m, n, N_pts), w_left, w_right, xtol=1e-15)
+                return root_w
+        except Exception:
+            pass
+        delta *= 1.5
+
+    return w_guess
+
+# =============================================================================
 # WKB BRANCH ASSIGNMENT
 # =============================================================================
 def assign_branches_global(eigs, m_val, N_WKB=8):
@@ -610,11 +791,18 @@ def assign_branches_global(eigs, m_val, N_WKB=8):
         wkb_preds[('MK_out', 0)] = w_mk_out
 
     for n in range(1, N_WKB + 1):
-        w_mp_p, w_mp_m, w_r, w_ms_p, w_ms_m = classify_wkb_roots_by_continuation(m_val, n)
+        # Solve high-accuracy global WKB frequencies
+        w_mp_p = solve_global_wkb_frequency(m_val, n, 'MP+')
+        w_mp_m = solve_global_wkb_frequency(m_val, n, 'MP-')
+        w_r = solve_global_wkb_frequency(m_val, n, 'R')
+
         wkb_preds[('MP+', n)] = w_mp_p
         wkb_preds[('MP-', n)] = w_mp_m
         wkb_preds[('R', n)] = w_r
+
         if B0 > 0.0:
+            w_ms_p = solve_global_wkb_frequency(m_val, n, 'MS+')
+            w_ms_m = solve_global_wkb_frequency(m_val, n, 'MS-')
             if not np.isnan(w_ms_p): wkb_preds[('MS+', n)] = w_ms_p
             if not np.isnan(w_ms_m): wkb_preds[('MS-', n)] = w_ms_m
 
@@ -634,7 +822,6 @@ def assign_branches_global(eigs, m_val, N_WKB=8):
             b_type, n = b_key
             w_pred = wkb_preds[b_key]
 
-            # Constraints
             is_forbidden = False
             if b_type in ['MP+', 'MS+', 'MK_out'] and w_eig <= 0:
                 is_forbidden = True
@@ -642,20 +829,19 @@ def assign_branches_global(eigs, m_val, N_WKB=8):
                 is_forbidden = True
 
             if is_forbidden:
-                Cost[j, b_idx] = 10.0**10 # strong penalty
+                Cost[j, b_idx] = 10.0**10
             else:
                 Cost[j, b_idx] = np.abs(w_eig - w_pred) / (np.abs(w_pred) + omega_floor)
 
-    # Solve linear sum assignment
     row_ind, col_idx = linear_sum_assignment(Cost)
 
-    matched_eigs = {} # j -> (branch_type, n, pred_w, error)
+    matched_eigs = {}
     WKB_REL_ERROR_MAX = 0.25
     WKB_ABS_ERROR_MAX = 10.0 * f
 
     for r_idx, c_idx in zip(row_ind, col_idx):
         if Cost[r_idx, c_idx] >= 10.0**9:
-            continue # ignore forbidden matches
+            continue
 
         w_eig = eigs[r_idx]
         b_key = branch_keys[c_idx]
@@ -665,7 +851,6 @@ def assign_branches_global(eigs, m_val, N_WKB=8):
         err_abs = np.abs(w_eig - w_pred)
         err_rel = err_abs / (np.abs(w_pred) + omega_floor)
 
-        # Match verification checks
         if err_abs <= WKB_ABS_ERROR_MAX or err_rel <= WKB_REL_ERROR_MAX:
             matched_eigs[r_idx] = (b_type, n, w_pred, err_abs)
 
@@ -822,7 +1007,6 @@ def run_validation_checks():
         print("Test C [Magnetic Derivative]: B0 = 0.0, skipped or trivially verified.")
 
     # Test D: Boundary condition & Test E: ODE residual
-    # Perform check for a sample eigenvalue of m=1
     N_sample = 64
     r_grid, D1_mat, D2_mat = chebyshev_lobatto(N_sample, r1, r2)
     roots = find_eigenvalues(1, N_sample, r_grid, D1_mat, D2_mat)
@@ -947,8 +1131,8 @@ def run_validation_checks():
     if prev_B0 > 0.0:
         print("\nTest I/J [B0 Continuation Trajectory for Rossby & MS, n=1]:")
         for step_b in np.linspace(0.0, prev_B0, 4):
-            w_r = magnetic_rossby_predictor(1, 1, r=r0)
-            w_ms = magnetostrophic_predictor(1, 1, r=r0)
+            # Pass step_b to the classifier
+            _, _, w_r, w_ms, _ = classify_wkb_roots_by_continuation(1, 1, r=r0, B_target=step_b)
             print(f"  B0 / B0_target = {step_b/prev_B0:4.1f} | Rossby/f = {w_r/f:+8.6f} | MS/f = {w_ms/f:+8.6f}")
     else:
         print("\nTest I/J [B0 Continuation]: B0 = 0.0, continuation is trivial.")
@@ -1320,6 +1504,52 @@ def plot_dispersion_relation(x_arr, dispersion_data):
     print("Saved plots:")
     print("  - outputs/swmhd_variable_depth_global_dispersion.png")
     print("  - outputs/swmhd_variable_depth_global_dispersion.pdf")
+
+    # Save machine-readable summary report
+    with open("outputs/branch_classification_report.txt", "w") as f_out:
+        f_out.write("========================================================================================================================\n")
+        f_out.write("                                 SWMHD VARIABLE-DEPTH BRANCH CLASSIFICATION REPORT                                      \n")
+        f_out.write("========================================================================================================================\n")
+        f_out.write(f"Parameters: Omega={Omega:.1e} rad/s, H0={H0} m, g={g} m/s^2, B0={B0:.1e} T, rho0={rho0} kg/m^3, C={C}\n")
+        f_out.write(f"Domain: r1={r1:.1e} m, r2={r2:.1e} m, N_col={N_col}\n")
+        f_out.write("------------------------------------------------------------------------------------------------------------------------\n")
+        f_out.write(f"{'m':>3} | {'omega [s^-1]':>14} | {'hat_omega':>10} | {'Branch':>12} | {'n':>3} | {'WKB Pred [s^-1]':>14} | {'Abs Error [s^-1]':>15} | {'ODE L2 Residual':>16}\n")
+        f_out.write("------------------------------------------------------------------------------------------------------------------------\n")
+
+        r_grid, D1_mat, D2_mat = chebyshev_lobatto(N_col, r1, r2)
+
+        if not (USE_ANALYTIC_BESSEL and not USE_VARIABLE_DEPTH):
+            for b_type in ['MP+', 'MP-', 'R', 'MS+', 'MS-', 'MK_in', 'MK_out']:
+                if b_type in ['MK_in', 'MK_out']:
+                    pts = dispersion_data[b_type]
+                    for item in pts:
+                        m_val, w_eig, w_wkb, err = item
+                        eta = get_eigenfunction(w_eig, m_val, N_col, r_grid, D1_mat, D2_mat)
+                        C2, C1, C0 = radial_coefficients(w_eig, m_val, r_grid)
+                        res_ode = C2 * (D2_mat @ eta) + C1 * (D1_mat @ eta) + C0 * eta
+                        l2_res = np.sqrt(np.mean(np.abs(res_ode[1:-1])**2))
+                        f_out.write(f"{m_val:3d} | {w_eig:14.6e} | {w_eig/f:10.4f} | {b_type:>12} | {0:3d} | {w_wkb:14.6e} | {err:15.6e} | {l2_res:16.6e}\n")
+                else:
+                    for n in sorted(dispersion_data[b_type].keys()):
+                        pts = dispersion_data[b_type][n]
+                        for item in pts:
+                            m_val, w_eig, w_wkb, err = item
+                            eta = get_eigenfunction(w_eig, m_val, N_col, r_grid, D1_mat, D2_mat)
+                            C2, C1, C0 = radial_coefficients(w_eig, m_val, r_grid)
+                            res_ode = C2 * (D2_mat @ eta) + C1 * (D1_mat @ eta) + C0 * eta
+                            l2_res = np.sqrt(np.mean(np.abs(res_ode[1:-1])**2))
+                            f_out.write(f"{m_val:3d} | {w_eig:14.6e} | {w_eig/f:10.4f} | {b_type:>12} | {n:3d} | {w_wkb:14.6e} | {err:15.6e} | {l2_res:16.6e}\n")
+
+            for item in dispersion_data['unassigned']:
+                m_val, w_eig = item
+                eta = get_eigenfunction(w_eig, m_val, N_col, r_grid, D1_mat, D2_mat)
+                C2, C1, C0 = radial_coefficients(w_eig, m_val, r_grid)
+                res_ode = C2 * (D2_mat @ eta) + C1 * (D1_mat @ eta) + C0 * eta
+                l2_res = np.sqrt(np.mean(np.abs(res_ode[1:-1])**2))
+                f_out.write(f"{m_val:3d} | {w_eig:14.6e} | {w_eig/f:10.4f} | {'unassigned':>12} | {'-':>3} | {'-':>14} | {'-':>15} | {l2_res:16.6e}\n")
+
+        f_out.write("========================================================================================================================\n")
+    print("  - outputs/branch_classification_report.txt")
 
     # Save separate versions of panels and legend as requested
     fig_left, ax_l = plt.subplots(figsize=(8, 6))
