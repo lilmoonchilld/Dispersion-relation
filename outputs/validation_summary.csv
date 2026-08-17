@@ -1,0 +1,13 @@
+Test Name,Status,Details
+TEST 1: Equilibrium Depth Consistency,PASS,|H_eq(r0) - H0| = 0.000000e+00 m
+TEST 2: Derivative Consistency,PASS,|Analytic - FD| = 2.781331e-15
+TEST 3: Magnetic Derivative Consistency,PASS,B0 = 0.0 (trivially zero)
+TEST 4: Bessel ODE Reduction,PASS,"Max C1 err = 8.47e-22, Max C0 err = 6.06e-28"
+TEST 5: Exact Bessel vs Chebyshev SVD,PASS,Max relative SVD error = 7.39e-09
+TEST 6: Exact Bessel vs Chebyshev Determinant,PASS,Max relative Det error = 2.82e-11
+TEST 7: Eigenfunction Residuals,PASS,Max full residual = 1.73e-18
+TEST 8: Resolution Convergence,PASS,Max N=64 vs N=96 relative error = 2.29e-09
+TEST 9: B0 -> 0 Limit Continuum,PASS,Max relative shift as B0->0 = 1.83e-05
+TEST 10: C -> 0 Limit Behavior,PASS,|dH/dr - Omega^2*r/g| = 0.00e+00
+TEST 11: Diagnostic Plot Generation,PASS,sigma_min_scan_m1.png & pdf created
+TEST 12: Determinant vs SVD Root Comparison,PASS,"SVD roots: 7, Det roots: 7"
