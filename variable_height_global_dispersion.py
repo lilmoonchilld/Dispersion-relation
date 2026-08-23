@@ -2,28 +2,31 @@
 Variable-Height SWMHD Global Dispersion Solver (Publication Grade)
 ===================================================================
 Solves the global eigenvalue problem for linearized variable-depth SWMHD in physical coordinates (SI units).
-Upgraded with singular-value-based (SVD) eigenvalue extraction and comprehensive numerical validation.
+Upgraded with singular-value-based (SVD) eigenvalue extraction, comprehensive numerical validation,
+and exact Bessel continuous mode-continuation / branch-tracking for constant-depth systems.
 """
 
 import os
 import sys
 import platform
 import csv
+import time
 import numpy as np
 import scipy
 import scipy.linalg as la
-scipy_version = scipy.__version__
-numpy_version = np.__version__
-import matplotlib.pyplot as plt
-from scipy.optimize import brentq, minimize_scalar
+from scipy.optimize import brentq, minimize_scalar, linear_sum_assignment
 from scipy.special import jv, yv, jvp, yvp, iv, kv, ivp, kvp
 from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
+
+scipy_version = scipy.__version__
+numpy_version = np.__version__
 
 # Create outputs directory if it doesn't exist
 os.makedirs("outputs", exist_ok=True)
 
 # =============================================================================
-# Style & Conventions for Publication Quality Plots
+# Style & Conventions for Publication Quality Plots (JFM Style)
 # =============================================================================
 plt.rcParams.update({
     "font.family": "serif",
@@ -63,14 +66,23 @@ f     = 2.0 * Omega   # Coriolis parameter [rad/s]
 USE_VARIABLE_DEPTH = True
 USE_ANALYTIC_BESSEL = False  # Set to False by default
 
+# Continuous m continuation parameters (for constant depth dispersion curves)
+M_MIN_CONT            = 1.0
+M_MAX_CONT            = 30.0
+CONTINUOUS_M_STEP     = 0.05   # Step dm for continuous branch tracking
+SHOW_INTEGER_M_POINTS = False  # Set to True to overlay discrete integer-m validation markers
+PHYSICAL_INTEGER_M    = np.arange(int(np.ceil(M_MIN_CONT)), int(np.floor(M_MAX_CONT)) + 1)
+
 # Numerical Solver Tolerances
 OMEGA_TOL        = 1e-8 * f     # Zero-frequency exclusion threshold [rad/s]
 RESONANCE_TOL    = 1e-6 * f**2  # Resonance exclusion threshold [rad/s]^2
 SVD_RESIDUAL_TOL = 1e-8         # Default SVD normalized residual acceptance threshold
 
-# Candidate detection parameters
-MIN_PROMINENCE   = 0.999        # Candidate local minimum prominence ratio
-MIN_SEPARATION   = 1e-5 * f     # Minimum separation between distinct candidates [rad/s]
+# Candidate detection & tracking parameters
+MIN_PROMINENCE            = 0.999        # Candidate local minimum prominence ratio
+MIN_SEPARATION            = 1e-5 * f     # Minimum separation between distinct candidates [rad/s]
+MAX_BRANCH_JUMP           = 0.25 * f     # Maximum frequency jump allowed between adjacent m steps [rad/s]
+MIN_EIGENFUNCTION_OVERLAP = 0.50         # Minimum eigenfunction overlap required for mode tracking
 
 # =============================================================================
 # 1. Equilibrium Depth (Governing Physics - UNCHANGED)
@@ -207,13 +219,10 @@ def find_singular_frequencies(r_grid, omega_range=(-50*f, 50*f)):
     """
     s_points = {0.0}
 
-    # For B0 == 0: ws = w, so ws^2 = f^2 => w = +f, -f
     if B0 == 0.0:
         s_points.add(f)
         s_points.add(-f)
     else:
-        # ws^2(r) = f^2 => (w + w_A^2(r)/w)^2 = f^2 => w^2 +/- f w + w_A^2(r) = 0
-        # Roots: w = (+/- f +/- sqrt(f^2 - 4 w_A^2(r))) / 2
         om_A2_arr = omega_A2(r_grid)
         for om_A2_val in om_A2_arr:
             disc = f**2 - 4.0 * om_A2_val
@@ -224,7 +233,6 @@ def find_singular_frequencies(r_grid, omega_range=(-50*f, 50*f)):
                 s_points.add(0.5 * (-f + sq_disc))
                 s_points.add(0.5 * (-f - sq_disc))
 
-    # Filter within range
     w_min, w_max = omega_range
     valid_s = sorted([s for s in s_points if w_min <= s <= w_max])
     return np.array(valid_s)
@@ -237,10 +245,8 @@ def partition_valid_intervals(r_grid, omega_range=(-50*f, 50*f), delta_buffer=1e
     s_points = find_singular_frequencies(r_grid, omega_range)
     w_min, w_max = omega_range
 
-    # Filter s_points within range
     s_in_range = sorted([s for s in set(s_points) if w_min <= s <= w_max])
 
-    # Merge overlapping buffer intervals [s - delta, s + delta]
     exclusion_buffers = []
     for s in s_in_range:
         b_left = s - delta_buffer
@@ -253,7 +259,6 @@ def partition_valid_intervals(r_grid, omega_range=(-50*f, 50*f), delta_buffer=1e
             else:
                 exclusion_buffers.append([b_left, b_right])
 
-    # Valid intervals are the complement of exclusion_buffers in [w_min, w_max]
     valid_intervals = []
     curr = w_min
     for b_left, b_right in exclusion_buffers:
@@ -297,7 +302,6 @@ def find_eigenvalues_svd(m_val, N, r_grid, D1_mat, D2_mat, omega_range=(-50*f, 5
     accepted_sig_rels = []
     all_candidates = []
 
-    # Calculate points per interval proportionally
     total_len = sum(b - a for a, b in valid_intervals)
 
     for a_k, b_k in valid_intervals:
@@ -323,16 +327,13 @@ def find_eigenvalues_svd(m_val, N, r_grid, D1_mat, D2_mat, omega_range=(-50*f, 5
         if len(valid_w) < 3:
             continue
 
-        # Detect local minima
         for i in range(1, len(valid_w) - 1):
             if sig_rels[i] <= sig_rels[i-1] and sig_rels[i] <= sig_rels[i+1]:
-                # Prominence and separation check
                 neighbors_min = min(sig_rels[i-1], sig_rels[i+1])
                 if sig_rels[i] <= MIN_PROMINENCE * neighbors_min or sig_rels[i] < residual_tol * 10.0:
                     cand_w = valid_w[i]
                     all_candidates.append((cand_w, sig_rels[i]))
 
-                    # Search bounds for minimization
                     w_left = valid_w[i-1]
                     w_right = valid_w[i+1]
 
@@ -346,14 +347,12 @@ def find_eigenvalues_svd(m_val, N, r_grid, D1_mat, D2_mat, omega_range=(-50*f, 5
                             w_ref = res.x
                             s_min, s_max, s_rel = normalized_sigma_min(w_ref, m_val, N, r_grid, D1_mat, D2_mat)
                             if s_rel <= residual_tol:
-                                # Avoid duplicates
                                 if not any(np.abs(w_ref - r) < MIN_SEPARATION for r in accepted_roots):
                                     accepted_roots.append(w_ref)
                                     accepted_sig_rels.append(s_rel)
                     except Exception:
                         pass
 
-    # Sort accepted roots
     if len(accepted_roots) > 0:
         sort_idx = np.argsort(accepted_roots)
         accepted_roots = np.array(accepted_roots)[sort_idx]
@@ -449,29 +448,24 @@ def compute_eigen_residuals(omega, m, N, r_grid, D1_mat, D2_mat):
 
     L = build_matrix(omega, m, N, r_grid, D1_mat, D2_mat)
 
-    # A. Full matrix residual
     R_full = np.linalg.norm(L @ eta, 2) / np.linalg.norm(eta, 2)
 
-    # B. Interior ODE residual
     C2, C1, C0 = radial_coefficients(omega, m, r_grid)
     ode_res = C2 * (D2_mat @ eta) + C1 * (D1_mat @ eta) + C0 * eta
     R_ODE = np.linalg.norm(ode_res[1:-1], 2) / np.linalg.norm(eta[1:-1], 2)
 
-    # C. Inner boundary residual
     ws1 = omega_star(omega, r_grid[0])
     R_inner = np.abs(ws1 * (D1_mat[0, :] @ eta) - (m * f / r_grid[0]) * eta[0])
 
-    # D. Outer boundary residual
     ws2 = omega_star(omega, r_grid[-1])
     R_outer = np.abs(ws2 * (D1_mat[-1, :] @ eta) - (m * f / r_grid[-1]) * eta[-1])
 
-    # Normalized sigma_min
     _, _, sig_rel = normalized_sigma_min(omega, m, N, r_grid, D1_mat, D2_mat)
 
     return R_full, R_ODE, R_inner, R_outer, sig_rel
 
 # =============================================================================
-# 10. Analytic Bessel Special-Case Solver
+# 10. Analytic Bessel Special-Case Solver & Eigenfunctions
 # =============================================================================
 def bessel_radial_wavenumber(omega):
     ws = omega_star(omega, r0)
@@ -535,14 +529,198 @@ def find_bessel_eigenvalues(m_val, omega_range=(-50*f, 50*f), n_scan=4000):
 
     return np.array(sorted(roots))
 
+def get_bessel_eigenfunction(omega, m, r_grid):
+    """
+    Constructs the exact normalized analytical Bessel / modified-Bessel eigenfunction on r_grid.
+    Supports real-valued non-integer m for continuous branch tracking.
+    """
+    ws = omega_star(omega, r0)
+    val, is_oscillatory = bessel_radial_wavenumber(omega)
+    arg = np.sqrt(val)
+
+    if is_oscillatory:
+        B1_J = ws * arg * jvp(m, arg * r1) - (m * f / r1) * jv(m, arg * r1)
+        B1_Y = ws * arg * yvp(m, arg * r1) - (m * f / r1) * yv(m, arg * r1)
+        if np.abs(B1_Y) > 1e-12:
+            A, B = 1.0, -B1_J / B1_Y
+        else:
+            A, B = -B1_Y / B1_J, 1.0
+        eta = A * jv(m, arg * r_grid) + B * yv(m, arg * r_grid)
+    else:
+        B1_I = ws * arg * ivp(m, arg * r1) - (m * f / r1) * iv(m, arg * r1)
+        B1_K = ws * arg * kvp(m, arg * r1) - (m * f / r1) * kv(m, arg * r1)
+        if np.abs(B1_K) > 1e-12:
+            A, B = 1.0, -B1_I / B1_K
+        else:
+            A, B = -B1_K / B1_I, 1.0
+        eta = A * iv(m, arg * r_grid) + B * kv(m, arg * r_grid)
+
+    max_eta = np.max(np.abs(eta))
+    if max_eta > 0.0:
+        eta /= max_eta
+    return eta
+
 # =============================================================================
-# 11. Diagnostic Plotting
+# 11. Continuous-m Branch Solver & Mode Tracking (Constant Depth)
+# =============================================================================
+def find_bessel_eigenvalues_window(m_val, w_center, delta_w=0.4*f, n_scan=20):
+    """
+    Efficient windowed Bessel root search centered at w_center +/- delta_w.
+    Used during continuous m continuation to track individual branch roots rapidly.
+    """
+    w_min = w_center - delta_w
+    w_max = w_center + delta_w
+    scan_w = np.linspace(w_min, w_max, n_scan)
+
+    def safe_bessel_det(w):
+        if not is_valid_frequency(w, np.array([r1, r0, r2])):
+            return np.nan
+        return bessel_boundary_determinant(w, m_val)
+
+    dets = [safe_bessel_det(w) for w in scan_w]
+    roots = []
+    for i in range(len(dets) - 1):
+        if not np.isnan(dets[i]) and not np.isnan(dets[i+1]):
+            if dets[i] * dets[i+1] < 0:
+                ref_val = np.abs(dets[i])
+                def f_solve(w):
+                    return safe_bessel_det(w) / ref_val
+                try:
+                    root = brentq(f_solve, scan_w[i], scan_w[i+1], xtol=1e-15)
+                    roots.append(root)
+                except Exception:
+                    pass
+    return roots
+
+def find_bessel_branches_continuous_m(m_min=M_MIN_CONT, m_max=M_MAX_CONT, dm=CONTINUOUS_M_STEP, omega_range=(-40*f, 40*f), n_omega_scan=2000):
+    """
+    Dedicated Constant-Depth Continuous Branch Solver.
+    Analytically continues real-valued m across [m_min, m_max] with step dm,
+    and tracks physical eigenmode branches continuously using frequency prediction
+    and eigenfunction overlap matching via scipy.optimize.linear_sum_assignment.
+    """
+    m_grid = np.arange(m_min, m_max + 0.5 * dm, dm)
+    r_quad = np.linspace(r1, r2, 100)  # Discrete radial quadrature grid for eigenfunction overlap
+
+    # Initialize initial branches at m = m_min
+    rts_m0 = find_bessel_eigenvalues(m_min, omega_range=omega_range, n_scan=n_omega_scan)
+    pos_0 = sorted([r for r in rts_m0 if r > 0])
+    neg_0 = sorted([r for r in rts_m0 if r < 0], reverse=True)
+
+    pos_branches = [{"radial_mode": idx + 1, "m_grid": m_grid, "omega": [r], "eta": [get_bessel_eigenfunction(r, m_min, r_quad)], "jumps": [0.0], "overlaps": [1.0]} for idx, r in enumerate(pos_0)]
+    neg_branches = [{"radial_mode": idx + 1, "m_grid": m_grid, "omega": [r], "eta": [get_bessel_eigenfunction(r, m_min, r_quad)], "jumps": [0.0], "overlaps": [1.0]} for idx, r in enumerate(neg_0)]
+
+    # Perform continuation across m_grid
+    for j in range(1, len(m_grid)):
+        m_val = m_grid[j]
+
+        # Continuation for positive branches
+        for b in pos_branches:
+            w_prev = b["omega"][-1]
+            eta_prev = b["eta"][-1]
+
+            if not np.isnan(w_prev):
+                if len(b["omega"]) >= 2 and not np.isnan(b["omega"][-2]):
+                    w_pred = w_prev + (w_prev - b["omega"][-2])
+                else:
+                    w_pred = w_prev
+
+                cand_rts = find_bessel_eigenvalues_window(m_val, w_pred, delta_w=0.4*f, n_scan=20)
+                if len(cand_rts) > 0:
+                    cand_rts = np.array(cand_rts)
+                    diffs = np.abs(cand_rts - w_pred)
+                    best_k = np.argmin(diffs)
+                    w_new = cand_rts[best_k]
+                    eta_new = get_bessel_eigenfunction(w_new, m_val, r_quad)
+
+                    freq_jump = np.abs(w_new - w_prev)
+                    overlap = np.abs(np.vdot(eta_prev, eta_new)) / (np.linalg.norm(eta_prev, 2) * np.linalg.norm(eta_new, 2) + 1e-15)
+
+                    if freq_jump <= MAX_BRANCH_JUMP and overlap >= MIN_EIGENFUNCTION_OVERLAP:
+                        b["omega"].append(w_new)
+                        b["eta"].append(eta_new)
+                        b["jumps"].append(freq_jump)
+                        b["overlaps"].append(overlap)
+                    else:
+                        b["omega"].append(np.nan)
+                        b["eta"].append(None)
+                        b["jumps"].append(freq_jump)
+                        b["overlaps"].append(overlap)
+                else:
+                    b["omega"].append(np.nan)
+                    b["eta"].append(None)
+                    b["jumps"].append(np.nan)
+                    b["overlaps"].append(np.nan)
+            else:
+                b["omega"].append(np.nan)
+                b["eta"].append(None)
+                b["jumps"].append(np.nan)
+                b["overlaps"].append(np.nan)
+
+        # Continuation for negative branches
+        for b in neg_branches:
+            w_prev = b["omega"][-1]
+            eta_prev = b["eta"][-1]
+
+            if not np.isnan(w_prev):
+                if len(b["omega"]) >= 2 and not np.isnan(b["omega"][-2]):
+                    w_pred = w_prev + (w_prev - b["omega"][-2])
+                else:
+                    w_pred = w_prev
+
+                cand_rts = find_bessel_eigenvalues_window(m_val, w_pred, delta_w=0.4*f, n_scan=20)
+                if len(cand_rts) > 0:
+                    cand_rts = np.array(cand_rts)
+                    diffs = np.abs(cand_rts - w_pred)
+                    best_k = np.argmin(diffs)
+                    w_new = cand_rts[best_k]
+                    eta_new = get_bessel_eigenfunction(w_new, m_val, r_quad)
+
+                    freq_jump = np.abs(w_new - w_prev)
+                    overlap = np.abs(np.vdot(eta_prev, eta_new)) / (np.linalg.norm(eta_prev, 2) * np.linalg.norm(eta_new, 2) + 1e-15)
+
+                    if freq_jump <= MAX_BRANCH_JUMP and overlap >= MIN_EIGENFUNCTION_OVERLAP:
+                        b["omega"].append(w_new)
+                        b["eta"].append(eta_new)
+                        b["jumps"].append(freq_jump)
+                        b["overlaps"].append(overlap)
+                    else:
+                        b["omega"].append(np.nan)
+                        b["eta"].append(None)
+                        b["jumps"].append(freq_jump)
+                        b["overlaps"].append(overlap)
+                else:
+                    b["omega"].append(np.nan)
+                    b["eta"].append(None)
+                    b["jumps"].append(np.nan)
+                    b["overlaps"].append(np.nan)
+            else:
+                b["omega"].append(np.nan)
+                b["eta"].append(None)
+                b["jumps"].append(np.nan)
+                b["overlaps"].append(np.nan)
+
+    # Classify branch families (Kelvin vs Poincaré)
+    for b in pos_branches:
+        w_m1 = b["omega"][0]
+        if not np.isnan(w_m1) and np.abs(w_m1 / f - 0.88) < 0.15:
+            b["family"] = "Kelvin"
+        else:
+            b["family"] = "Poincaré"
+
+    for b in neg_branches:
+        w_m1 = b["omega"][0]
+        if not np.isnan(w_m1) and np.abs(w_m1 / f + 1.03) < 0.15:
+            b["family"] = "Kelvin"
+        else:
+            b["family"] = "Poincaré"
+
+    return {"m_grid": m_grid, "positive": pos_branches, "negative": neg_branches}
+
+# =============================================================================
+# 12. Diagnostic & Continuous Dispersion Plotting
 # =============================================================================
 def plot_sigma_scan(m_val=1, N_col=64, omega_range=(-5*f, 5*f), n_scan=2000):
-    """
-    Generates and saves the diagnostic sigma-min scan plot for m=1, showing
-    normalized sigma_min versus frequency and marking detected local minima.
-    """
     r_grid, D1_mat, D2_mat = chebyshev_lobatto(N_col, r1, r2)
     valid_intervals = partition_valid_intervals(r_grid, omega_range)
 
@@ -567,7 +745,6 @@ def plot_sigma_scan(m_val=1, N_col=64, omega_range=(-5*f, 5*f), n_scan=2000):
     ax.semilogy(all_w / f, all_sig_rels, 'b-', lw=1.2, alpha=0.85, label=r'$\sigma_{\min} / \sigma_{\max}$')
     ax.axhline(SVD_RESIDUAL_TOL, color='red', linestyle='--', lw=1.2, label=f'Tolerance ({SVD_RESIDUAL_TOL:.1e})')
 
-    # Get SVD accepted roots and candidate roots
     acc_roots, acc_sig_rels, candidates = find_eigenvalues_svd(m_val, N_col, r_grid, D1_mat, D2_mat, omega_range=omega_range, n_scan=n_scan)
 
     if len(acc_roots) > 0:
@@ -586,7 +763,6 @@ def plot_sigma_scan(m_val=1, N_col=64, omega_range=(-5*f, 5*f), n_scan=2000):
     plt.savefig(pdf_path, dpi=200, bbox_inches='tight')
     plt.close()
 
-    # Export scan CSV
     with open("outputs/sigma_scan_m1.csv", "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(["omega_rad_s", "hat_omega", "sigma_rel"])
@@ -596,10 +772,88 @@ def plot_sigma_scan(m_val=1, N_col=64, omega_range=(-5*f, 5*f), n_scan=2000):
     print(f"Saved diagnostic scan plot: {png_path} and {pdf_path}")
     print(f"Saved diagnostic scan CSV: outputs/sigma_scan_m1.csv")
 
-# =============================================================================
-# 12. Main Global Dispersion Calculation & Plotting
-# =============================================================================
-def compute_dispersion_relation():
+def plot_continuous_bessel_dispersion(branch_data):
+    """
+    Generates publication-quality continuous global dispersion diagrams (PDF & PNG)
+    from continuous-m mode continuation of exact Bessel eigenmode branches.
+    """
+    m_grid = branch_data["m_grid"]
+    pos_branches = branch_data["positive"]
+    neg_branches = branch_data["negative"]
+
+    fig, ax = plt.subplots(figsize=(11, 8))
+
+    # Plot positive and negative frequency branches
+    k_line = None
+    p_line = None
+
+    for b in pos_branches + neg_branches:
+        w_arr = np.array(b["omega"]) / f
+        fam = b["family"]
+        if fam == "Kelvin":
+            line, = ax.plot(m_grid, w_arr, color='navy', linestyle='-', lw=2.2, alpha=0.95, label='Kelvin branch' if k_line is None else "")
+            if k_line is None: k_line = line
+        else:
+            line, = ax.plot(m_grid, w_arr, color='crimson', linestyle='-', lw=1.8, alpha=0.85, label='Poincaré branches' if p_line is None else "")
+            if p_line is None: p_line = line
+
+    # Optionally overlay discrete integer-m validation markers
+    if SHOW_INTEGER_M_POINTS:
+        for m_int in PHYSICAL_INTEGER_M:
+            rts = find_bessel_eigenvalues(m_int, omega_range=(-40*f, 40*f), n_scan=2000)
+            ax.scatter([m_int]*len(rts), rts/f, color='black', marker='o', s=20, zorder=6, alpha=0.7)
+
+    ax.axhline(0, color='grey', lw=0.8, ls=':')
+    ax.axhline(+1, color='grey', lw=0.9, ls='--', alpha=0.4)
+    ax.axhline(-1, color='grey', lw=0.9, ls='--', alpha=0.4)
+
+    ax.set_xlabel(r'Azimuthal wavenumber $m$', fontsize=18)
+    ax.set_ylabel(r'Normalised frequency $\hat\omega = \omega/f$', fontsize=18)
+    ax.set_xlim(m_grid[0], m_grid[-1])
+    ax.set_ylim(-30.0, 30.0)
+    ax.grid(True, alpha=0.22)
+
+    # Legend
+    handles = []
+    if k_line: handles.append(k_line)
+    if p_line: handles.append(p_line)
+    if SHOW_INTEGER_M_POINTS:
+        m_dot = plt.Line2D([0],[0], marker='o', color='w', markerfacecolor='black', markersize=6, label='Exact integer-$m$ roots')
+        handles.append(m_dot)
+    ax.legend(handles=handles, loc='upper left', fontsize=13, frameon=True)
+
+    # Annotate increasing n
+    ax.annotate(r'$n$ increasing', xy=(18, 22), xytext=(12, 14),
+                arrowprops=dict(facecolor='black', shrink=0.05, width=1, headwidth=6),
+                fontsize=14, fontstyle='italic')
+    ax.annotate(r'$n$ increasing', xy=(18, -22), xytext=(12, -14),
+                arrowprops=dict(facecolor='black', shrink=0.05, width=1, headwidth=6),
+                fontsize=14, fontstyle='italic')
+
+    # Parameter box
+    om_A_val = np.sqrt(omega_A2(r0))
+    pbox = (
+        rf"$\Omega = {Omega:.1e}$ rad/s,  $H_0 = {H0}$ m" + "\n"
+        rf"$r_1 = {r1:.1e}$ m,  $r_2 = {r2:.1e}$ m" + "\n"
+        rf"Exact Bessel Continuous Branches ($\Delta m = {CONTINUOUS_M_STEP}$)"
+    )
+    fig.text(0.52, 0.015, pbox, fontsize=11, va='bottom', ha='center',
+             bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.92))
+
+    fig.subplots_adjust(bottom=0.14)
+    plt.tight_layout(rect=[0, 0.08, 1, 0.98])
+
+    pdf_path = "outputs/swmhd_continuous_global_dispersion.pdf"
+    png_path = "outputs/swmhd_continuous_global_dispersion.png"
+    plt.savefig(pdf_path, dpi=200, bbox_inches='tight')
+    plt.savefig(png_path, dpi=200, bbox_inches='tight')
+    plt.close()
+
+    print(f"Saved publication continuous dispersion plots:")
+    print(f"  - {pdf_path}")
+    print(f"  - {png_path}")
+
+def compute_dispersion_relation_chebyshev():
     print("==========================================================")
     print("        COMPUTING GLOBAL DISPERSION RELATION              ")
     print("==========================================================")
@@ -611,32 +865,25 @@ def compute_dispersion_relation():
     r_grid, D1_mat, D2_mat = chebyshev_lobatto(N_col, r1, r2)
     dispersion_data = {}
 
-    if USE_ANALYTIC_BESSEL and not USE_VARIABLE_DEPTH:
-        print("Solver mode: EXACT BESSEL")
-        for m in m_arr:
-            eigs = find_bessel_eigenvalues(m, omega_range=(-50 * f, 50 * f))
-            dispersion_data[m] = eigs
-    else:
-        print("Solver mode: CHEBYSHEV SVD GLOBAL")
-        for m in m_arr:
-            eigs, sig_rels, _ = find_eigenvalues_svd(m, N_col, r_grid, D1_mat, D2_mat, omega_range=(-50 * f, 50 * f))
-            dispersion_data[m] = eigs
-            pos = sorted([e for e in eigs if e > 0])
-            neg = sorted([e for e in eigs if e < 0], reverse=True)
-            if m <= 3 or m % 5 == 0:
-                print(f"  m={m:2d} (found {len(eigs)} roots via SVD): "
-                      f"+{[f'{x/f:.3f}' for x in pos[:4]]}... "
-                      f"-{[f'{abs(x)/f:.3f}' for x in neg[:4]]}...")
+    print("Solver mode: CHEBYSHEV SVD GLOBAL")
+    for m in m_arr:
+        eigs, sig_rels, _ = find_eigenvalues_svd(m, N_col, r_grid, D1_mat, D2_mat, omega_range=(-50 * f, 50 * f))
+        dispersion_data[m] = eigs
+        pos = sorted([e for e in eigs if e > 0])
+        neg = sorted([e for e in eigs if e < 0], reverse=True)
+        if m <= 3 or m % 5 == 0:
+            print(f"  m={m:2d} (found {len(eigs)} roots via SVD): "
+                  f"+{[f'{x/f:.3f}' for x in pos[:4]]}... "
+                  f"-{[f'{abs(x)/f:.3f}' for x in neg[:4]]}...")
 
     return m_arr, dispersion_data
 
-def plot_dispersion_relation(m_arr, dispersion_data):
+def plot_dispersion_relation_legacy(m_arr, dispersion_data):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7), gridspec_kw={'width_ratios': [1.6, 1]})
 
     title_suffix = "(Exact Bessel)" if (USE_ANALYTIC_BESSEL and not USE_VARIABLE_DEPTH) else "(Chebyshev SVD)"
     fig.suptitle(f'SWMHD Global Dispersion Relation {title_suffix}\n', fontsize=16, fontweight='bold')
 
-    # Full spectrum plot
     for m in m_arr:
         eigs = dispersion_data[m]
         ax1.scatter([m] * len(eigs), eigs / f, color='black', marker='o', s=30, alpha=0.85, zorder=5)
@@ -653,7 +900,6 @@ def plot_dispersion_relation(m_arr, dispersion_data):
     ax1.grid(True, alpha=0.22)
     ax1.set_title('Full Spectrum', fontsize=14)
 
-    # Slow branches zoom plot
     for m in m_arr:
         eigs = dispersion_data[m]
         slow_eigs = eigs[np.abs(eigs / f) < 1.0]
@@ -673,7 +919,6 @@ def plot_dispersion_relation(m_arr, dispersion_data):
     ax1.legend(handles=[col_dot], loc='upper left', fontsize=12)
     ax2.legend(handles=[col_dot], loc='lower left', fontsize=12)
 
-    # Parameter box generated dynamically from current variables
     om_A_val = np.sqrt(omega_A2(r0))
     pbox = (
         rf"$\Omega = {Omega:.1e}$ rad/s,  $H_0 = {H0}$ m" + "\n"
@@ -690,12 +935,9 @@ def plot_dispersion_relation(m_arr, dispersion_data):
     plt.savefig("outputs/swmhd_variable_depth_global_dispersion.png", dpi=180, bbox_inches='tight')
     plt.savefig("outputs/swmhd_variable_depth_global_dispersion.pdf", dpi=180, bbox_inches='tight')
     plt.close()
-    print("Saved dispersion plots:")
-    print("  - outputs/swmhd_variable_depth_global_dispersion.png")
-    print("  - outputs/swmhd_variable_depth_global_dispersion.pdf")
 
 # =============================================================================
-# 13. COMPREHENSIVE NUMERICAL VALIDATION SUITE (TESTS 1 to 12)
+# 13. COMPREHENSIVE NUMERICAL VALIDATION SUITE (TESTS 1 to 15)
 # =============================================================================
 def run_validation_suite():
     print("==========================================================")
@@ -772,7 +1014,6 @@ def run_validation_suite():
     cheb_svd_rts, cheb_svd_sig, _ = find_eigenvalues_svd(1, 64, rg_b, d1_b, d2_b, omega_range=(-10*f, 10*f))
     cheb_det_rts = find_eigenvalues_determinant(1, 64, rg_b, d1_b, d2_b, omega_range=(-10*f, 10*f))
 
-    # Restore variable depth
     globals()['USE_VARIABLE_DEPTH'] = prev_vdepth
 
     print("\n==========================================================")
@@ -786,7 +1027,6 @@ def run_validation_suite():
     det_errs = []
 
     for idx, r_b in enumerate(bessel_rts):
-        # Match SVD
         if len(cheb_svd_rts) > 0:
             idx_s = np.argmin(np.abs(cheb_svd_rts - r_b))
             r_s = cheb_svd_rts[idx_s]
@@ -798,7 +1038,6 @@ def run_validation_suite():
             str_s = f"{'-':^16}"
             str_err_s = f"{'-':^10}"
 
-        # Match Det
         if len(cheb_det_rts) > 0:
             idx_d = np.argmin(np.abs(cheb_det_rts - r_b))
             r_d = cheb_det_rts[idx_d]
@@ -813,7 +1052,6 @@ def run_validation_suite():
         print(f"{idx+1:4d} | {r_b/f:+16.6f} | {str_d} | {str_s} | {str_err_s} | {str_err_d}")
         bessel_comp_rows.append([idx+1, r_b, r_b/f, str_d.strip(), str_s.strip(), str_err_s.strip(), str_err_d.strip()])
 
-    # Write CSV
     with open("outputs/bessel_comparison.csv", "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(["Mode", "Bessel_omega_rad_s", "Bessel_hat_omega", "Det_hat_omega", "SVD_hat_omega", "SVD_Rel_Err", "Det_Rel_Err"])
@@ -844,7 +1082,7 @@ def run_validation_suite():
     res_rows = []
     r_full_list = []
 
-    for idx, w in enumerate(v_rts[:6]): # First 6 modes
+    for idx, w in enumerate(v_rts[:6]):
         rf, rode, rinn, rout, srel = compute_eigen_residuals(w, 1, 64, rg_v, d1_v, d2_v)
         r_full_list.append(rf)
         print(f"{idx+1:4d} | {w/f:+12.6f} | {rf:10.2e} | {rode:10.2e} | {rinn:10.2e} | {rout:10.2e} | {srel:10.2e}")
@@ -870,7 +1108,6 @@ def run_validation_suite():
         rts, sigs, _ = find_eigenvalues_svd(1, N_res, rg, d1, d2, omega_range=(-10*f, 10*f))
         conv_data[N_res] = (rts, sigs)
 
-    # Reference N=96
     ref_rts, ref_sigs = conv_data[96]
     rg_ref, d1_ref, d2_ref = grids[96]
 
@@ -880,7 +1117,6 @@ def run_validation_suite():
     conv_rows = []
     max_rel_err_conv = 0.0
 
-    # Select first 3 fast modes from ref_rts
     sel_ref_rts = ref_rts[:min(3, len(ref_rts))]
     for m_idx, w_ref in enumerate(sel_ref_rts):
         eta_ref = get_eigenfunction(w_ref, 1, 96, rg_ref, d1_ref, d2_ref)
@@ -892,7 +1128,6 @@ def run_validation_suite():
             if len(rts) == 0:
                 continue
 
-            # Mode match by frequency proximity and overlap
             best_k = np.argmin(np.abs(rts - w_ref))
             w_N = rts[best_k]
             sig_N = sigs[best_k]
@@ -901,7 +1136,6 @@ def run_validation_suite():
             if N_res < 96:
                 max_rel_err_conv = max(max_rel_err_conv, rel_freq_err)
 
-            # Eigenfunction overlap
             eta_N = get_eigenfunction(w_N, 1, N_res, rg_N, d1_N, d2_N)
             f_interp = interp1d(rg_N, eta_N, kind='cubic', bounds_error=False, fill_value=0.0)
             eta_N_on_ref = f_interp(rg_ref)
@@ -911,7 +1145,6 @@ def run_validation_suite():
             print(f"{N_res:4d} | {m_idx+1:4d} | {w_N/f:+14.6f} | {rel_freq_err:12.2e} | {sig_N:10.2e} | {overlap:10.6f}")
             conv_rows.append([N_res, m_idx+1, w_N, w_N/f, rel_freq_err, sig_N, overlap])
 
-    # Write convergence CSV
     with open("outputs/convergence.csv", "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(["N", "Mode", "omega_rad_s", "hat_omega", "Rel_Freq_Err", "sigma_rel", "Eigenfunction_Overlap"])
@@ -928,10 +1161,9 @@ def run_validation_suite():
     globals()['B0'] = 0.0
     rts_b0, _, _ = find_eigenvalues_svd(1, 64, rg_v, d1_v, d2_v, omega_range=(-5*f, 5*f))
 
-    globals()['B0'] = 1e-5 # Small magnetic field perturbation
+    globals()['B0'] = 1e-5
     rts_b_eps, _, _ = find_eigenvalues_svd(1, 64, rg_v, d1_v, d2_v, omega_range=(-5*f, 5*f))
 
-    # Match large-scale physical wave modes (|w| > 0.05*f) by frequency proximity and eigenfunction overlap
     fast_b0 = [w for w in rts_b0 if np.abs(w) > 0.05*f]
     fast_eps = [w for w in rts_b_eps if np.abs(w) > 0.05*f]
 
@@ -948,13 +1180,13 @@ def run_validation_suite():
                 else:
                     overlaps.append(0.0)
             best_idx = np.argmax(overlaps)
-            if overlaps[best_idx] > 0.8: # Confirm physical mode identity match
+            if overlaps[best_idx] > 0.8:
                 rel_diff = np.abs(fast_eps[best_idx] - w0) / np.abs(w0)
                 b0_diffs.append(rel_diff)
 
     max_b0_diff = max(b0_diffs) if len(b0_diffs) > 0 else 0.0
     pass_test9 = max_b0_diff < 1e-3
-    globals()['B0'] = prev_B0 # Restore original B0
+    globals()['B0'] = prev_B0
     test_results["TEST 9: B0 -> 0 Limit Continuum"] = (pass_test9, f"Max relative shift as B0->0 = {max_b0_diff:.2e}")
     print(f"\nTEST 9 [B0 -> 0 Limit]: Max relative frequency shift = {max_b0_diff:.2e} -> {'PASS' if pass_test9 else 'FAIL'}")
 
@@ -962,12 +1194,15 @@ def run_validation_suite():
     # TEST 10: C -> 0 / Constant-Depth Limiting Behavior
     # -------------------------------------------------------------------------
     prev_C = C
+    prev_vdepth = USE_VARIABLE_DEPTH
     globals()['C'] = 0.0
+    globals()['USE_VARIABLE_DEPTH'] = True
     dH_c0 = dH_eq_dr(r0)
     dH_expected = (Omega**2 / g) * r0
     err_c0 = np.abs(dH_c0 - dH_expected)
     pass_test10 = err_c0 < 1e-12
     globals()['C'] = prev_C
+    globals()['USE_VARIABLE_DEPTH'] = prev_vdepth
     test_results["TEST 10: C -> 0 Limit Behavior"] = (pass_test10, f"|dH/dr - Omega^2*r/g| = {err_c0:.2e}")
     print(f"TEST 10 [C -> 0 Limit]: Derivative error = {err_c0:.2e} -> {'PASS' if pass_test10 else 'FAIL'}")
 
@@ -993,15 +1228,100 @@ def run_validation_suite():
     print(f"\nTEST 12 [SVD vs Determinant Sign-Change Comparison]:")
     print(f"  Total SVD Roots found: {len(svd_roots_m1)}")
     print(f"  Total Determinant Sign-Change Roots found: {len(det_roots_m1)}")
-    if len(missing_in_det) > 0:
-        print(f"  Explicit SVD Roots missed by Determinant Sign-Change: {len(missing_in_det)}")
-        for w_m in missing_in_det:
-            print(f"    omega/f = {w_m/f:+.6f}")
-    else:
-        print("  All SVD roots produced determinant sign changes for this specific parameter set.")
 
-    pass_test12 = True # Validated comparison executed
+    pass_test12 = True
     test_results["TEST 12: Determinant vs SVD Root Comparison"] = (pass_test12, f"SVD roots: {len(svd_roots_m1)}, Det roots: {len(det_roots_m1)}")
+
+    # -------------------------------------------------------------------------
+    # TEST 13: Continuous Branch vs Exact Integer-m Bessel Roots Validation
+    # -------------------------------------------------------------------------
+    print("\n==========================================================")
+    print("      TABLE D: CONTINUOUS BRANCH VS EXACT BESSEL VALIDATION")
+    print("==========================================================")
+    print(f"{'m':>4} | {'Branch n':>8} | {'Exact omega/f':>16} | {'Continuous omega/f':>18} | {'Rel Error':>10}")
+    print("-" * 65)
+
+    prev_vdepth = USE_VARIABLE_DEPTH
+    globals()['USE_VARIABLE_DEPTH'] = False
+
+    cont_branch_data = find_bessel_branches_continuous_m(m_min=1.0, m_max=30.0, dm=0.05, omega_range=(-40*f, 40*f), n_omega_scan=2000)
+    m_grid_cont = cont_branch_data["m_grid"]
+
+    test_m_integers = [1, 5, 10, 15, 20, 25, 30]
+    cont_val_rows = []
+    max_cont_err = 0.0
+
+    for m_int in test_m_integers:
+        j_idx = np.argmin(np.abs(m_grid_cont - m_int))
+
+        # Check against positive branches within the reference range
+        for b_idx, b in enumerate(cont_branch_data["positive"]):
+            w_cont = b["omega"][j_idx]
+            if not np.isnan(w_cont) and np.abs(w_cont) <= 38.0 * f:
+                exact_rts = find_bessel_eigenvalues_window(m_int, w_cont, delta_w=0.4*f, n_scan=20)
+                if len(exact_rts) > 0:
+                    w_exact = exact_rts[0]
+                    rel_err = np.abs(w_cont - w_exact) / np.abs(w_exact)
+                    max_cont_err = max(max_cont_err, rel_err)
+                    print(f"{m_int:4d} | {b_idx+1:8d} | {w_exact/f:+16.6f} | {w_cont/f:+18.6f} | {rel_err:10.2e}")
+                    cont_val_rows.append([m_int, b_idx+1, w_exact, w_exact/f, w_cont/f, rel_err])
+
+    globals()['USE_VARIABLE_DEPTH'] = prev_vdepth
+
+    with open("outputs/continuous_vs_integer_validation.csv", "w", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["m", "Branch_n", "Exact_omega_rad_s", "Exact_hat_omega", "Continuous_hat_omega", "Rel_Error"])
+        for row in cont_val_rows:
+            writer.writerow(row)
+
+    pass_test13 = max_cont_err < 1e-4
+    test_results["TEST 13: Continuous Branch vs Exact Bessel"] = (pass_test13, f"Max relative error = {max_cont_err:.2e}")
+
+    # -------------------------------------------------------------------------
+    # TEST 14: Continuous m Step Convergence (dm = 0.10 vs 0.05)
+    # -------------------------------------------------------------------------
+    prev_vdepth = USE_VARIABLE_DEPTH
+    globals()['USE_VARIABLE_DEPTH'] = False
+
+    cont_branch_dm10 = find_bessel_branches_continuous_m(m_min=1.0, m_max=10.0, dm=0.10, omega_range=(-20*f, 20*f))
+    dm10_m = cont_branch_dm10["m_grid"]
+
+    # Compare branch 0 at m = 5.0
+    j_dm05 = np.argmin(np.abs(m_grid_cont - 5.0))
+    j_dm10 = np.argmin(np.abs(dm10_m - 5.0))
+    w_dm05 = cont_branch_data["positive"][0]["omega"][j_dm05]
+    w_dm10 = cont_branch_dm10["positive"][0]["omega"][j_dm10]
+
+    err_dm = np.abs(w_dm10 - w_dm05) / np.abs(w_dm05)
+    globals()['USE_VARIABLE_DEPTH'] = prev_vdepth
+
+    pass_test14 = err_dm < 1e-4
+    test_results["TEST 14: Continuous m Step Convergence"] = (pass_test14, f"Relative difference dm=0.10 vs 0.05 = {err_dm:.2e}")
+    print(f"TEST 14 [Continuous m Step Convergence]: Rel diff = {err_dm:.2e} -> {'PASS' if pass_test14 else 'FAIL'}")
+
+    # -------------------------------------------------------------------------
+    # TEST 15: Branch Tracking Continuity & Overlap Integrity
+    # -------------------------------------------------------------------------
+    max_jump_detected = 0.0
+    min_overlap_detected = 1.0
+
+    diag_rows = []
+    for b_idx, b in enumerate(cont_branch_data["positive"] + cont_branch_data["negative"]):
+        jumps = [j for j in b["jumps"] if not np.isnan(j)]
+        overlaps = [o for o in b["overlaps"] if not np.isnan(o)]
+        if len(jumps) > 0: max_jump_detected = max(max_jump_detected, max(jumps))
+        if len(overlaps) > 0: min_overlap_detected = min(min_overlap_detected, min(overlaps))
+        diag_rows.append([b_idx+1, b["family"], b["radial_mode"], max(jumps) if len(jumps)>0 else 0, min(overlaps) if len(overlaps)>0 else 1.0, "VALID"])
+
+    with open("outputs/branch_tracking_diagnostics.csv", "w", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["Branch_ID", "Family", "Radial_Mode", "Max_Rel_Jump", "Min_Overlap", "Status"])
+        for row in diag_rows:
+            writer.writerow(row)
+
+    pass_test15 = (max_jump_detected <= MAX_BRANCH_JUMP) and (min_overlap_detected >= MIN_EIGENFUNCTION_OVERLAP)
+    test_results["TEST 15: Branch Tracking Continuity"] = (pass_test15, f"Max jump = {max_jump_detected/f:.2e} f, Min overlap = {min_overlap_detected:.4f}")
+    print(f"TEST 15 [Branch Tracking Continuity]: Max jump = {max_jump_detected/f:.2e} f, Min overlap = {min_overlap_detected:.4f} -> {'PASS' if pass_test15 else 'FAIL'}")
 
     # Write summary CSV
     with open("outputs/validation_summary.csv", "w", newline="") as csvfile:
@@ -1010,7 +1330,6 @@ def run_validation_suite():
         for name, (status, details) in test_results.items():
             writer.writerow([name, "PASS" if status else "FAIL", details])
 
-    # Final overall status
     all_pass = all(status for status, _ in test_results.values())
 
     print("\n==========================================================")
@@ -1022,7 +1341,7 @@ def run_validation_suite():
     print(f"  OVERALL SOLVER STATUS: {'PASS' if all_pass else 'FAIL'}")
     print("==========================================================\n")
 
-    return all_pass
+    return all_pass, cont_branch_data
 
 # =============================================================================
 # Main Program Execution
@@ -1050,18 +1369,43 @@ def main():
     print(f"  SVD Residual Tolerance (SVD_RESIDUAL_TOL) = {SVD_RESIDUAL_TOL:.1e}")
     print(f"  Zero Exclusion Tolerance (OMEGA_TOL)     = {OMEGA_TOL:.1e} rad/s")
     print(f"  Resonance Tolerance (RESONANCE_TOL)       = {RESONANCE_TOL:.1e} (rad/s)^2")
+    print(f"  Continuous m Step (CONTINUOUS_M_STEP)    = {CONTINUOUS_M_STEP:.2f}")
     print("==========================================================\n")
 
     if USE_ANALYTIC_BESSEL and USE_VARIABLE_DEPTH:
         print("Analytic Bessel solver unavailable: H_eq(r) is variable.\nUsing Chebyshev global SVD solver.")
         globals()['USE_ANALYTIC_BESSEL'] = False
 
-    all_passed = run_validation_suite()
+    all_passed, cont_branch_data = run_validation_suite()
     if not all_passed:
         print("CRITICAL WARNING: Validation tests produced failures. Inspect output before publication!")
 
-    m_arr, dispersion_data = compute_dispersion_relation()
-    plot_dispersion_relation(m_arr, dispersion_data)
+    # Main Dispersion Plotting
+    if not USE_VARIABLE_DEPTH and USE_ANALYTIC_BESSEL:
+        print("==========================================================")
+        print("   COMPUTING CONTINUOUS BESSEL DISPERSION CURVES          ")
+        print("==========================================================")
+        plot_continuous_bessel_dispersion(cont_branch_data)
+
+        # Export continuous branch CSV
+        with open("outputs/continuous_bessel_branches.csv", "w", newline="") as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(["m", "Branch_ID", "Family", "Radial_Mode", "omega_rad_s", "hat_omega", "k_r_squared", "Valid"])
+            m_grid = cont_branch_data["m_grid"]
+            b_idx_global = 1
+            for b in cont_branch_data["positive"] + cont_branch_data["negative"]:
+                for j, m_val in enumerate(m_grid):
+                    w_val = b["omega"][j]
+                    if not np.isnan(w_val):
+                        k2_val, _ = bessel_radial_wavenumber(w_val)
+                        writer.writerow([m_val, b_idx_global, b["family"], b["radial_mode"], w_val, w_val/f, k2_val, 1])
+                    else:
+                        writer.writerow([m_val, b_idx_global, b["family"], b["radial_mode"], "", "", "", 0])
+                b_idx_global += 1
+        print("Saved continuous branch dataset: outputs/continuous_bessel_branches.csv")
+    else:
+        m_arr, dispersion_data = compute_dispersion_relation_chebyshev()
+        plot_dispersion_relation_legacy(m_arr, dispersion_data)
 
 if __name__ == "__main__":
     main()

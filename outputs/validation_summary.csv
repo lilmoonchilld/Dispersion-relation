@@ -11,3 +11,6 @@ TEST 9: B0 -> 0 Limit Continuum,PASS,Max relative shift as B0->0 = 1.83e-05
 TEST 10: C -> 0 Limit Behavior,PASS,|dH/dr - Omega^2*r/g| = 0.00e+00
 TEST 11: Diagnostic Plot Generation,PASS,sigma_min_scan_m1.png & pdf created
 TEST 12: Determinant vs SVD Root Comparison,PASS,"SVD roots: 7, Det roots: 7"
+TEST 13: Continuous Branch vs Exact Bessel,PASS,Max relative error = 1.05e-13
+TEST 14: Continuous m Step Convergence,PASS,Relative difference dm=0.10 vs 0.05 = 1.29e-16
+TEST 15: Branch Tracking Continuity,PASS,"Max jump = 5.10e-02 f, Min overlap = 1.0000"
