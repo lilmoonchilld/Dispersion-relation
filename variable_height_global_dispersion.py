@@ -814,7 +814,7 @@ def compute_dispersion_relation():
         r_grid, D1_mat, D2_mat = chebyshev_lobatto(N_col, r1, r2)
         dispersion_data = {}
         for m in m_arr:
-            eigs, sig_rels, _ = find_eigenvalues_svd(m, N_col, r_grid, D1_mat, D2_mat, omega_range=(-50 * f, 50 * f))
+            eigs, sig_rels, _ = find_eigenvalues_svd(m, N_col, r_grid, D1_mat, D2_mat, omega_range=(-25 * f, 25 * f), n_scan=400)
             dispersion_data[m] = eigs
             pos = sorted([e for e in eigs if e > 0])
             neg = sorted([e for e in eigs if e < 0], reverse=True)
@@ -1093,7 +1093,7 @@ def run_validation_suite():
     for N_res in resolutions:
         rg, d1, d2 = chebyshev_lobatto(N_res, r1, r2)
         grids[N_res] = (rg, d1, d2)
-        rts, sigs, _ = find_eigenvalues_svd(1, N_res, rg, d1, d2, omega_range=(-10*f, 10*f), n_scan=600)
+        rts, sigs, _ = find_eigenvalues_svd(1, N_res, rg, d1, d2, omega_range=(-5*f, 5*f), n_scan=300)
         conv_data[N_res] = (rts, sigs)
 
     ref_rts, ref_sigs = conv_data[96]
