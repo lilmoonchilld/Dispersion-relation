@@ -1,0 +1,137 @@
+==============================================================
+  System Parameters (Dimensionless)
+==============================================================
+  Three Governing Numbers:
+    1. Magnetic-Coriolis ratio (hat_VA2sq) : 0.0006
+    2. Inverse Of Froude Number Square          (hat_c0^2)    : 3.4880
+    3. Radial-gravity ratio    (gamma)       : 1.7778
+--------------------------------------------------------------
+  Domain: hat_r in [0.667, 1.333]
+V_A2       = 4.795611e-05 m/s
+omega_low = 3.585040e-05 s^-1
+omega_high= 6.414960e-05 s^-1
+low/(2Ω)  = 0.358504
+high/(2Ω) = 0.641496
+
+Running collocation N=64, m=1..30 ...
+  m= 1: +['0.158', '4.644', '8.936', '13.294']... -['1.816', '4.740', '8.961', '13.306']...
+  m= 2: +['0.178', '4.914', '9.088', '13.400']... -['2.471', '5.106', '9.139', '13.422']...
+  m= 3: +['0.203', '1.185', '2.953', '5.375']... -['3.197', '5.657', '9.422', '13.611']...
+  m= 5: +['0.238', '0.974', '4.952', '6.809']... -['4.688', '7.156', '10.284', '14.197']...
+  m=10: +['0.280', '0.823', '8.770', '11.547']... -['8.345', '11.536', '13.854', '16.745']...
+  m=15: +['0.299', '0.769', '12.381', '15.688']... -['11.977', '15.582', '18.290', '20.608']...
+  m=20: +['0.311', '0.740', '15.978', '19.576']... -['15.595', '19.468', '22.442', '25.053']...
+  m=25: +['0.319', '0.722', '19.567', '23.406']... -['0.467', '0.492', '19.202', '23.301']...
+  m=30: +['0.324', '0.709', '27.200', '30.414']... -['0.424', '0.542', '22.798', '27.098']...
+
+Saved: swmhd_four_branch_dispersion.pdf / .png
+
+==============================================================
+  Pure-imaginary stability spectrum
+  (Searching specifically for purely growing/decaying modes
+   with Re(omega) = 0)
+==============================================================
+m =  1:
+    no accepted pure-imaginary eigenmode found
+m =  2:
+    no accepted pure-imaginary eigenmode found
+m =  3:
+    no accepted pure-imaginary eigenmode found
+m =  4:
+    no accepted pure-imaginary eigenmode found
+m =  5:
+    no accepted pure-imaginary eigenmode found
+m =  6:
+    no accepted pure-imaginary eigenmode found
+m =  7:
+    no accepted pure-imaginary eigenmode found
+m =  8:
+    no accepted pure-imaginary eigenmode found
+m =  9:
+    no accepted pure-imaginary eigenmode found
+m = 10:
+    no accepted pure-imaginary eigenmode found
+m = 11:
+    no accepted pure-imaginary eigenmode found
+m = 12:
+    no accepted pure-imaginary eigenmode found
+m = 13:
+    no accepted pure-imaginary eigenmode found
+m = 14:
+    no accepted pure-imaginary eigenmode found
+m = 15:
+    no accepted pure-imaginary eigenmode found
+m = 16:
+    no accepted pure-imaginary eigenmode found
+m = 17:
+    no accepted pure-imaginary eigenmode found
+m = 18:
+    no accepted pure-imaginary eigenmode found
+m = 19:
+    no accepted pure-imaginary eigenmode found
+m = 20:
+    no accepted pure-imaginary eigenmode found
+m = 21:
+    no accepted pure-imaginary eigenmode found
+m = 22:
+    no accepted pure-imaginary eigenmode found
+m = 23:
+    no accepted pure-imaginary eigenmode found
+m = 24:
+    no accepted pure-imaginary eigenmode found
+m = 25:
+    no accepted pure-imaginary eigenmode found
+m = 26:
+    no accepted pure-imaginary eigenmode found
+m = 27:
+    no accepted pure-imaginary eigenmode found
+m = 28:
+    no accepted pure-imaginary eigenmode found
+m = 29:
+    no accepted pure-imaginary eigenmode found
+m = 30:
+    no accepted pure-imaginary eigenmode found
+==============================================================
+  Summary Table
+  m       gamma_hat       gamma [s^-1]       classification
+--------------------------------------------------------------
+  1       none found
+  2       none found
+  3       none found
+  4       none found
+  5       none found
+  6       none found
+  7       none found
+  8       none found
+  9       none found
+ 10       none found
+ 11       none found
+ 12       none found
+ 13       none found
+ 14       none found
+ 15       none found
+ 16       none found
+ 17       none found
+ 18       none found
+ 19       none found
+ 20       none found
+ 21       none found
+ 22       none found
+ 23       none found
+ 24       none found
+ 25       none found
+ 26       none found
+ 27       none found
+ 28       none found
+ 29       none found
+ 30       none found
+==============================================================
+No pure-imaginary eigenmodes found across all m.
+==============================================================
+Saved: swmhd_pure_imaginary_modes.csv
+Saved: swmhd_pure_imaginary_summary.csv
+Saved: swmhd_pure_imaginary_dispersion.png
+
+Note: This calculation searches only for purely imaginary eigenfrequencies
+with Re(omega)=0. No purely growing mode with Re(omega)=0 was found
+in the specified m and gamma search ranges (if applicable).
