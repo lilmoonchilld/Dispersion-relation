@@ -403,18 +403,125 @@ class RootRecord:
     m: int
     omega: mp.mpc
     omega_norm: mp.mpc
+    omega_real: mp.mpf
+    omega_imag: mp.mpf
     sign: int
-    radial_k: mp.mpf | None
     n: int | None
+    mode_family: str
+    radial_behavior: str
     K2: mp.mpc
-    k_eff2_r0: mp.mpc | None
     Lambda: mp.mpc
+    k_eff2_r1: mp.mpc | None
+    k_eff2_r0: mp.mpc | None
+    k_eff2_r2: mp.mpc | None
+    radial_k_r0: mp.mpc | None
+    radial_nodes: int | None
     residual: mp.mpf
 
 
 # ============================================================
 # FIND ROOTS AT m=1 ONLY
 # ============================================================
+# ============================================================
+# NEW: POINCARE INITIAL GUESSES
+# ============================================================
+def generate_poincare_seeds(m: int, cfg: Config):
+    seeds = []
+    L = cfg.r2 - cfg.r1
+    for n in range(1, 16):
+        kr_n = n * mp.pi / L
+
+        # omega0^2 = f^2 + omega_A^2 + g H0 [ k_r,n^2 + m^2/r0^2 ]
+        omega0_sq = cfg.f**2 + omega_A_squared(cfg) + cfg.g * cfg.H0 * (kr_n**2 + (m/cfg.r0)**2)
+        omega0 = mp.sqrt(omega0_sq)
+
+        for factor in (mp.mpf("0.9"), mp.mpf("1.0"), mp.mpf("1.1")):
+            seeds.append(+omega0 * factor)
+            seeds.append(-omega0 * factor)
+
+    return seeds
+
+# ============================================================
+# NEW: RADIAL BEHAVIOR AND NODE COUNTING
+# ============================================================
+def classify_radial_behavior(omega, m: int, cfg: Config):
+    try:
+        r_vals = mp.linspace(cfg.r1, cfg.r2, 100)
+        has_positive = False
+        has_negative = False
+
+        for r in r_vals:
+            kr2 = k_eff_squared(r, omega, m, cfg)
+
+            if abs(mp.im(kr2)) > 1e-8:
+                return "complex"
+
+            kr2_re = mp.re(kr2)
+            if kr2_re > 0:
+                has_positive = True
+            elif kr2_re < 0:
+                has_negative = True
+
+        if has_positive and not has_negative:
+            return "propagating"
+        elif has_negative and not has_positive:
+            return "evanescent"
+        elif has_positive and has_negative:
+            return "turning"
+        else:
+            return "complex"
+    except Exception:
+        return "complex"
+
+def count_interior_nodes(omega, m: int, cfg: Config):
+    try:
+        # Construct eigenfunction: eta(r) = A*M(r) + B*W(r)
+        # Using the wall matrix at r1:
+        # M11*A + M12*B = 0 => A = M12, B = -M11
+        M_mat = whittaker_boundary_matrix(omega, m, cfg)
+        M11, M12 = M_mat[0]
+
+        A = M12
+        B = -M11
+
+        # Sample on fine grid
+        r_vals = mp.linspace(cfg.r1, cfg.r2, 200)
+        eta_vals = []
+        for r in r_vals:
+            M, W, _, _, _, _, _ = whittaker_basis(omega, m, cfg, r)
+            eta = A*M + B*W
+            # Use real part of eta for node counting since for propagating modes it should be mainly real or have a fixed phase
+            eta_vals.append(mp.re(eta))
+
+        # Filter noise and count crossings (interior only)
+        # First find max amplitude to set threshold
+        max_amp = max(abs(v) for v in eta_vals)
+        if max_amp == 0:
+            return None
+
+        threshold = max_amp * mp.mpf('1e-5')
+
+        # Remove boundary points
+        eta_interior = eta_vals[1:-1]
+
+        # Filter values
+        filtered = [v for v in eta_interior if abs(v) > threshold]
+
+        if not filtered:
+            return 0
+
+        nodes = 0
+        current_sign = mp.sign(filtered[0])
+        for v in filtered[1:]:
+            s = mp.sign(v)
+            if s != current_sign:
+                nodes += 1
+                current_sign = s
+
+        return nodes
+    except Exception:
+        return None
+
 def seed_roots_m1(cfg: Config):
     roots = []
 
@@ -584,15 +691,21 @@ def continue_branch(
 def solve_all_branches(cfg: Config):
     initial = initialize_branches(cfg)
 
-    records = []
+    # Print m=1 summary
+    print(f"Total m=1 roots found: {len(initial)}")
 
-    for n, sign, root_m1 in initial:
-        branch = continue_branch(
-            n=n,
-            sign=sign,
-            root_m1=root_m1,
-            cfg=cfg,
-        )
+    print("\nm=1 Roots Summary")
+    print(f"{'Index':<6} {'Re[omega]/(2Omega)':<25} {'Im[omega]/(2Omega)':<25} {'K^2':<20} {'k_r^2(r0)':<20} {'Behavior':<15} {'Nodes':<6} {'Family':<15} {'|D|':<10}")
+    print("-" * 150)
+    for i, rec in enumerate(initial):
+        nodes_str = str(rec.radial_nodes) if rec.radial_nodes is not None else "--"
+        print(f"{i:<6} {float(mp.re(rec.omega_norm)):<25.9e} {float(mp.im(rec.omega_norm)):<25.3e} {float(mp.re(rec.K2)):<20.3e} {float(mp.re(rec.k_eff2_r0)):<20.3e} {rec.radial_behavior:<15} {nodes_str:<6} {rec.mode_family:<15} {float(rec.residual):<10.3e}")
+
+    records = []
+    records.extend(initial) # Keep m=1 roots
+
+    for rec in initial:
+        branch = continue_branch(rec, cfg)
         records.extend(branch)
 
     return records
@@ -616,45 +729,33 @@ def print_parameter_summary(cfg: Config):
     print(f"r0          = {mp.nstr(cfg.r0, PRINT_DIGITS)}")
     print(f"C           = {mp.nstr(cfg.C, PRINT_DIGITS)}")
     print("m range     = 1 ... 30")
-    print(f"n retained  = 1 ... {N_RADIAL_MODES}")
+    # print(f"n retained  = 1 ... {N_RADIAL_MODES}")
     print("root search = direct FindRoot + continuation")
     print("radial k_r^2 = K^2 + Lambda/r - m^2/r^2")
     print("=" * 80)
 
 
 def print_root_table(records, cfg: Config):
-    print("\nAccepted roots")
-    print(
-        "m   sign   n   Re[omega]/(2Omega)   Im[omega]/(2Omega)   "
-        "k_r(r0) [m^-1]       K^2 [m^-2]          Lambda        |D|"
-    )
-    print("-" * 125)
+    print("\nFinal Summary")
 
-    for rec in sorted(
-        records,
-        key=lambda q: (
-            q.m,
-            q.sign,
-            q.n if q.n is not None else 999,
-        ),
-    ):
-        kr = (
-            mp.nstr(rec.radial_k, 8)
-            if rec.radial_k is not None
-            else "--"
-        )
+    m1_count = len([r for r in records if r.m == 1])
+    real_count = len([r for r in records if abs(r.omega_imag / cfg.f) < REAL_ROOT_IMAG_TOL])
+    complex_count = len(records) - real_count
+    prop_count = len([r for r in records if r.radial_behavior == "propagating"])
+    evan_count = len([r for r in records if r.radial_behavior == "evanescent"])
+    turn_count = len([r for r in records if r.radial_behavior == "turning"])
+    poinc_branches = len(set(r.n for r in records if r.mode_family == "Poincare" and r.n is not None))
+    max_poinc_n = max([r.n for r in records if r.mode_family == "Poincare" and r.n is not None] + [0])
 
-        print(
-            f"{rec.m:2d}  "
-            f"{rec.sign:+d}    "
-            f"{rec.n:2d}   "
-            f"{float(mp.re(rec.omega_norm)): .9e}   "
-            f"{float(mp.im(rec.omega_norm)): .3e}   "
-            f"{kr:>15s}   "
-            f"{float(mp.re(rec.K2)): .6e}   "
-            f"{float(mp.re(rec.Lambda)): .6e}   "
-            f"{float(rec.residual):.3e}"
-        )
+    print(f"Number of m=1 roots found: {m1_count}")
+    print(f"Number of real roots: {real_count}")
+    print(f"Number of complex roots: {complex_count}")
+    print(f"Number of propagating roots: {prop_count}")
+    print(f"Number of evanescent roots: {evan_count}")
+    print(f"Number of turning-point roots: {turn_count}")
+    print(f"Number of Poincare branches: {poinc_branches}")
+    print(f"Maximum Poincare n reached: {max_poinc_n}")
+
 
 
 # ============================================================
