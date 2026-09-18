@@ -99,7 +99,7 @@ INITIAL_GUESS_NORMALIZED = (
 
 SECOND_GUESS_OFFSET = mp.mpf("1e-5")
 
-N_RADIAL_MODES = 6
+N_RADIAL_MODES = 12
 REAL_ROOT_IMAG_TOL = mp.mpf("1e-8")
 ROOT_DUPLICATE_TOL = mp.mpf("1e-7")
 ROOT_RESIDUAL_TOL = mp.mpf("1e-12")
@@ -330,11 +330,8 @@ def is_finite_complex(z) -> bool:
         return False
 
 
-def root_is_real(root, cfg: Config) -> bool:
-    return (
-        is_finite_complex(root)
-        and abs(mp.im(root) / cfg.f) <= REAL_ROOT_IMAG_TOL
-    )
+def root_is_valid(root) -> bool:
+    return is_finite_complex(root)
 
 
 def normalized_frequency(omega, cfg: Config):
@@ -425,10 +422,13 @@ class RootRecord:
 # ============================================================
 # NEW: POINCARE INITIAL GUESSES
 # ============================================================
+# ============================================================
+# NEW: RADIAL BEHAVIOR AND NODE COUNTING
+# ============================================================
 def generate_poincare_seeds(m: int, cfg: Config):
     seeds = []
     L = cfg.r2 - cfg.r1
-    for n in range(1, 16):
+    for n in range(1, N_RADIAL_MODES + 1):
         kr_n = n * mp.pi / L
 
         # omega0^2 = f^2 + omega_A^2 + g H0 [ k_r,n^2 + m^2/r0^2 ]
@@ -446,7 +446,7 @@ def generate_poincare_seeds(m: int, cfg: Config):
 # ============================================================
 def classify_radial_behavior(omega, m: int, cfg: Config):
     try:
-        r_vals = mp.linspace(cfg.r1, cfg.r2, 100)
+        r_vals = mp.linspace(cfg.r1, cfg.r2, 50)
         has_positive = False
         has_negative = False
 
@@ -485,16 +485,22 @@ def count_interior_nodes(omega, m: int, cfg: Config):
         B = -M11
 
         # Sample on fine grid
-        r_vals = mp.linspace(cfg.r1, cfg.r2, 200)
-        eta_vals = []
+        r_vals = mp.linspace(cfg.r1, cfg.r2, 100)
+        eta_vals_complex = []
         for r in r_vals:
             M, W, _, _, _, _, _ = whittaker_basis(omega, m, cfg, r)
             eta = A*M + B*W
-            # Use real part of eta for node counting since for propagating modes it should be mainly real or have a fixed phase
-            eta_vals.append(mp.re(eta))
+            eta_vals_complex.append(eta)
+
+        # Remove an arbitrary complex phase before node counting
+        max_val = max(eta_vals_complex, key=abs)
+        if abs(max_val) == 0:
+            return None
+        phase = max_val / abs(max_val)
+
+        eta_vals = [mp.re(v / phase) for v in eta_vals_complex]
 
         # Filter noise and count crossings (interior only)
-        # First find max amplitude to set threshold
         max_amp = max(abs(v) for v in eta_vals)
         if max_amp == 0:
             return None
@@ -525,12 +531,14 @@ def count_interior_nodes(omega, m: int, cfg: Config):
 def seed_roots_m1(cfg: Config):
     roots = []
 
-    for guess_norm in INITIAL_GUESS_NORMALIZED:
-        omega_guess = mp.mpf(str(guess_norm)) * cfg.f
+    # 1. Low-frequency / Kelvin-like / user seeds
+    seeds = [mp.mpf(str(g)) * cfg.f for g in INITIAL_GUESS_NORMALIZED if g != 0]
 
-        if omega_guess == 0:
-            continue
+    # 2. Poincare seeds
+    poincare = generate_poincare_seeds(1, cfg)
+    seeds.extend(poincare)
 
+    for omega_guess in seeds:
         try:
             root = direct_findroot(
                 omega_guess,
@@ -540,7 +548,7 @@ def seed_roots_m1(cfg: Config):
         except Exception:
             continue
 
-        if not root_is_real(root, cfg):
+        if not root_is_valid(root):
             continue
 
         try:
@@ -565,48 +573,70 @@ def seed_roots_m1(cfg: Config):
 def initialize_branches(cfg: Config):
     roots = seed_roots_m1(cfg)
 
-    positive = []
-    negative = []
+    initial_tuples = []
+
+    # We will deduplicate Poincare branches that get the same n and sign.
+    # We want to keep the one with the smallest residual.
+    poincare_candidates = {} # (n, sign) -> (root, residual)
+
+    other_roots = []
 
     for root in roots:
-        kr = effective_radial_wavenumber_at_r0(
-            root,
-            1,
-            cfg,
-        )
+        sign = 1 if mp.re(root) > 0 else -1
 
-        if kr is None:
+        behavior = classify_radial_behavior(root, 1, cfg)
+
+        try:
+            residual = abs(dispersion_determinant(root, 1, cfg))
+        except Exception:
             continue
 
-        if mp.re(root) > 0:
-            positive.append((kr, root))
-        elif mp.re(root) < 0:
-            negative.append((kr, root))
+        n = None
+        mode_family = "low-frequency"
 
-    positive.sort(key=lambda q: float(q[0]))
-    negative.sort(key=lambda q: float(q[0]))
+        # A root is a Poincare branch candidate only when:
+        # abs(Im(omega)/f) < REAL_ROOT_IMAG_TOL AND radial_behavior == "propagating" AND radial node counting succeeds.
+        is_poincare = False
+        if abs(mp.im(root)/cfg.f) < REAL_ROOT_IMAG_TOL and behavior == "propagating":
+            nodes = count_interior_nodes(root, 1, cfg)
+            if nodes is not None:
+                n = nodes + 1
+                mode_family = "Poincare"
+                is_poincare = True
 
-    positive = positive[:N_RADIAL_MODES]
-    negative = negative[:N_RADIAL_MODES]
+                key = (n, sign)
+                if key not in poincare_candidates or residual < poincare_candidates[key][1]:
+                    poincare_candidates[key] = (root, residual)
 
-    initial = []
+        if not is_poincare:
+            if behavior == "evanescent":
+                mode_family = "evanescent"
+            elif behavior == "turning":
+                mode_family = "turning"
 
-    for n, (_, root) in enumerate(positive, start=1):
-        initial.append((n, +1, root))
+            # For low frequency, if not selected as Poincare branch but abs(Re(omega)/f) <= 1
+            if mode_family == "low-frequency" and abs(mp.re(root)/cfg.f) > 1.0:
+                # Still keep them per requirement: "Do not discard them... Retain the root."
+                mode_family = "other"
+            other_roots.append((None, sign, root, mode_family))
 
-    for n, (_, root) in enumerate(negative, start=1):
-        initial.append((n, -1, root))
+    # Add back the best Poincare candidates
+    for (n, sign), (root, res) in poincare_candidates.items():
+        initial_tuples.append((n, sign, root, "Poincare"))
 
-    return initial
+    initial_tuples.extend(other_roots)
+
+    return initial_tuples
 
 
 # ============================================================
 # CONTINUE ONE DIRECT-ROOT BRANCH IN m
 # ============================================================
 def continue_branch(
-    n: int,
-    sign: int,
+    n,
+    sign,
     root_m1,
+    mode_family,
     cfg: Config,
 ):
     branch_records = []
@@ -633,7 +663,7 @@ def continue_branch(
             except Exception:
                 break
 
-        if not root_is_real(root, cfg):
+        if not root_is_valid(root):
             break
 
         # Preserve branch sign.
@@ -643,17 +673,12 @@ def continue_branch(
             break
 
         try:
-            residual = abs(
-                dispersion_determinant(root, m, cfg)
-            )
+            residual = abs(dispersion_determinant(root, m, cfg))
             K2 = K_squared(root, m, cfg)
             lam = Lambda_whittaker(root, m, cfg)
-            kr2_r0 = k_eff_squared(
-                cfg.r0,
-                root,
-                m,
-                cfg,
-            )
+            k2_r1 = k_eff_squared(cfg.r1, root, m, cfg)
+            k2_r0 = k_eff_squared(cfg.r0, root, m, cfg)
+            k2_r2 = k_eff_squared(cfg.r2, root, m, cfg)
         except Exception:
             break
 
@@ -661,20 +686,36 @@ def continue_branch(
             break
 
         kr0 = None
-        if abs(mp.im(kr2_r0)) <= mp.mpf("1e-8") and mp.re(kr2_r0) > 0:
-            kr0 = mp.sqrt(mp.re(kr2_r0))
+        if abs(mp.im(k2_r0)) <= mp.mpf("1e-8") and mp.re(k2_r0) > 0:
+            kr0 = mp.sqrt(mp.re(k2_r0))
+
+        behavior = classify_radial_behavior(root, m, cfg)
+
+        nodes = None
+        if behavior == "propagating" and mode_family == "Poincare":
+            nodes = count_interior_nodes(root, m, cfg)
+
+        guess_str = mp.nstr(omega_guess / cfg.f, 6) if m > 1 else "N/A"
+        print(f"m={m}, n={n}, sign={sign}, guess={guess_str}")
 
         branch_records.append(
             RootRecord(
                 m=m,
                 omega=root,
                 omega_norm=normalized_frequency(root, cfg),
+                omega_real=mp.re(root),
+                omega_imag=mp.im(root),
                 sign=sign,
-                radial_k=kr0,
                 n=n,
+                mode_family=mode_family,
+                radial_behavior=behavior,
                 K2=K2,
-                k_eff2_r0=kr2_r0,
                 Lambda=lam,
+                k_eff2_r1=k2_r1,
+                k_eff2_r0=k2_r0,
+                k_eff2_r2=k2_r2,
+                radial_k_r0=kr0,
+                radial_nodes=nodes,
                 residual=residual,
             )
         )
@@ -691,21 +732,39 @@ def continue_branch(
 def solve_all_branches(cfg: Config):
     initial = initialize_branches(cfg)
 
-    # Print m=1 summary
-    print(f"Total m=1 roots found: {len(initial)}")
-
-    print("\nm=1 Roots Summary")
-    print(f"{'Index':<6} {'Re[omega]/(2Omega)':<25} {'Im[omega]/(2Omega)':<25} {'K^2':<20} {'k_r^2(r0)':<20} {'Behavior':<15} {'Nodes':<6} {'Family':<15} {'|D|':<10}")
-    print("-" * 150)
-    for i, rec in enumerate(initial):
-        nodes_str = str(rec.radial_nodes) if rec.radial_nodes is not None else "--"
-        print(f"{i:<6} {float(mp.re(rec.omega_norm)):<25.9e} {float(mp.im(rec.omega_norm)):<25.3e} {float(mp.re(rec.K2)):<20.3e} {float(mp.re(rec.k_eff2_r0)):<20.3e} {rec.radial_behavior:<15} {nodes_str:<6} {rec.mode_family:<15} {float(rec.residual):<10.3e}")
-
     records = []
-    records.extend(initial) # Keep m=1 roots
 
-    for rec in initial:
-        branch = continue_branch(rec, cfg)
+    print(f"Total m=1 roots found: {len(initial)}")
+    print("\n{:<6} {:<25} {:<25} {:<20} {:<20} {:<20} {:<20} {:<15} {:<6} {:<15} {:<10}".format(
+        "Index", "Re[omega]/(2Omega)", "Im[omega]/(2Omega)", "K^2", "k_r^2(r1)", "k_r^2(r0)", "k_r^2(r2)", "Behavior", "Nodes", "Family", "|D|"))
+    print("-" * 180)
+
+    for idx, (n, sign, root_m1, mode_family) in enumerate(initial):
+        try:
+            residual = abs(dispersion_determinant(root_m1, 1, cfg))
+            K2 = K_squared(root_m1, 1, cfg)
+            lam = Lambda_whittaker(root_m1, 1, cfg)
+            k2_r1 = k_eff_squared(cfg.r1, root_m1, 1, cfg)
+            k2_r0 = k_eff_squared(cfg.r0, root_m1, 1, cfg)
+            k2_r2 = k_eff_squared(cfg.r2, root_m1, 1, cfg)
+        except Exception:
+            continue
+
+        behavior = classify_radial_behavior(root_m1, 1, cfg)
+        nodes = count_interior_nodes(root_m1, 1, cfg) if behavior == "propagating" and mode_family == "Poincare" else None
+
+        nodes_str = str(nodes) if nodes is not None else "None"
+
+        print("{:<6} {:<25.9e} {:<25.3e} {:<20.3e} {:<20.3e} {:<20.3e} {:<20.3e} {:<15} {:<6} {:<15} {:<10.3e}".format(
+            idx, float(mp.re(root_m1/cfg.f)), float(mp.im(root_m1/cfg.f)), float(mp.re(K2)), float(mp.re(k2_r1)), float(mp.re(k2_r0)), float(mp.re(k2_r2)), behavior, nodes_str, mode_family, float(residual)))
+
+        branch = continue_branch(
+            n=n,
+            sign=sign,
+            root_m1=root_m1,
+            mode_family=mode_family,
+            cfg=cfg,
+        )
         records.extend(branch)
 
     return records
@@ -776,54 +835,38 @@ def plot_dispersion(records, cfg: Config):
         -1: "blue",
     }
 
-    for n in range(1, N_RADIAL_MODES + 1):
+    # Filter for mostly real roots for the main plotting
+    real_records = [r for r in records if abs(r.omega_imag / cfg.f) < REAL_ROOT_IMAG_TOL]
+
+    # 1. Poincare propagating branches
+    poincare_recs = [r for r in real_records if r.mode_family == "Poincare"]
+    unique_n = sorted(list(set(r.n for r in poincare_recs if r.n is not None)))
+
+    for n in unique_n:
         for sign in (-1, +1):
+            pts = [r for r in poincare_recs if r.n == n and r.sign == sign]
+            pts.sort(key=lambda r: r.m)
 
-            pts = [
-                rec
-                for rec in records
-                if rec.n == n
-                and rec.sign == sign
-                and root_is_real(rec.omega, cfg)
-            ]
-
-            pts.sort(key=lambda rec: rec.m)
-
-            if len(pts) < 2:
+            if len(pts) < 1:
                 continue
 
-            m_vals = np.asarray(
-                [rec.m for rec in pts],
-                dtype=float,
-            )
+            m_vals = np.asarray([r.m for r in pts], dtype=float)
+            w_vals = np.asarray([float(r.omega_real / cfg.f) for r in pts], dtype=float)
 
-            w_vals = np.asarray(
-                [
-                    float(mp.re(rec.omega_norm))
-                    for rec in pts
-                ],
-                dtype=float,
-            )
-
-            label = (
-                rf"$n={n}$, "
-                + (r"$\omega>0$" if sign > 0 else r"$\omega<0$")
-            )
+            label = rf"$n={n}$, " + (r"$\omega>0$" if sign > 0 else r"$\omega<0$")
 
             ax1.plot(
-                m_vals,
-                w_vals,
+                m_vals, w_vals,
                 color=colors[sign],
                 linestyle="-",
                 linewidth=1.8,
-                marker=None,
+                marker=None, # requested to not have arbitrary space but not scatter either
                 solid_capstyle="round",
                 label=label,
             )
 
             ax2.plot(
-                m_vals,
-                w_vals,
+                m_vals, w_vals,
                 color=colors[sign],
                 linestyle="-",
                 linewidth=1.8,
@@ -831,57 +874,64 @@ def plot_dispersion(records, cfg: Config):
                 solid_capstyle="round",
             )
 
+    # 2. Slow branches / low-frequency (evanescent / other)
+    # They should also be plotted via Re(omega)/(2Omega)
+    # The requirement says "Plot retained low-frequency roots using Re(omega)/(2Omega) including roots that are real, weakly complex, evanescent, turning-point."
+    slow_recs = [r for r in records if r.mode_family != "Poincare"]
+    for sign in (-1, +1):
+        # We can just scatter plot these slow branches because they don't have n branch tracking strictly
+        # Oh actually we do have a branch sequence. Let's group them by the original m=1 branch.
+        # But wait, they all have n=None. We can group by sign and plot dots, or we can find unique initial branches and track them.
+        pts = [r for r in slow_recs if r.sign == sign]
+        pts.sort(key=lambda r: r.m)
+        if len(pts) > 0:
+            m_vals = [r.m for r in pts]
+            w_vals = [float(r.omega_real / cfg.f) for r in pts]
+
+            ax2.scatter(
+                m_vals, w_vals,
+                color=colors[sign],
+                marker="x",
+                s=20,
+                alpha=0.6,
+                label="Slow / Evanescent" if sign == 1 else None
+            )
+
     # ------------------------------------------------------------
     # Full diagram
     # ------------------------------------------------------------
-    ax1.axhline(
-        0.0,
-        linewidth=0.8,
-        color="black",
-    )
-
+    ax1.axhline(0.0, linewidth=0.8, color="black")
     ax1.set_xlim(1, 30)
     ax1.set_ylabel(r"$\omega/(2\Omega)$")
     ax1.set_title("Annular SWMHD dispersion diagram")
     ax1.grid(True, linewidth=0.4, alpha=0.30)
-    ax1.legend(
-        frameon=False,
-        fontsize=8,
-        ncol=2,
-    )
+
+    # Handle legends carefully
+    handles, labels = ax1.get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    ax1.legend(by_label.values(), by_label.keys(), frameon=False, fontsize=8, ncol=2)
 
     # ------------------------------------------------------------
     # Slow-branch zoom
     # ------------------------------------------------------------
-    ax2.axhline(
-        0.0,
-        linewidth=0.8,
-        color="black",
-    )
-
+    ax2.axhline(0.0, linewidth=0.8, color="black")
     ax2.set_ylim(-1.0, 1.0)
     ax2.set_xlim(1, 30)
     ax2.set_xlabel(r"Azimuthal mode number $m$")
     ax2.set_ylabel(r"$\omega/(2\Omega)$")
-    ax2.set_title(
-        r"Slow branches: $-1 \leq \omega/(2\Omega) \leq 1$"
-    )
-    ax2.set_xticks(np.arange(1, 31, 1))
+    ax2.set_title(r"Slow branches: $-1 \leq \omega/(2\Omega) \leq 1$")
+    ax2.set_xticks(np.arange(1, 31, 2))
     ax2.grid(True, linewidth=0.4, alpha=0.30)
 
-    output = Path(
-        "SWMHD_dispersion_Mathematica_style.png"
-    )
+    handles, labels = ax2.get_legend_handles_labels()
+    if handles:
+        by_label = dict(zip(labels, handles))
+        ax2.legend(by_label.values(), by_label.keys(), frameon=False, fontsize=8)
 
-    fig.savefig(
-        output,
-        dpi=300,
-        bbox_inches="tight",
-    )
-
+    output = Path("SWMHD_dispersion_Mathematica_style.png")
+    fig.savefig(output, dpi=300, bbox_inches="tight")
     plt.show()
     plt.close(fig)
-
     print(f"\nDispersion diagram saved to: {output.resolve()}")
 
 
